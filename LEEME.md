@@ -2,94 +2,123 @@
 
 **Español** · [English](USER_GUIDE.en.md) · [Inicio](README.md)
 
-## Empezar
+Guía práctica de uso de **PDFiu**. Todas las operaciones se ejecutan en tu equipo sin cuentas ni nube.
 
-**PDF firmados y protegidos.** Introduce la contraseña de apertura para leer el PDF original y consultar sus firmas. Al desbloquear o editar un PDF firmado, PDFiu avisa y trabaja sobre una copia sin firmas. Guarda la copia con otro nombre para conservar el documento firmado original.
+## Índice
 
-**Lectura.** Con el visor activo, usa ← y → o Re Pág y Av Pág para cambiar de página. El extremo inferior del lateral izquierdo agrupa el número de página, el total, el zoom y el menú **Tamaño de página**. En enfoque o pantalla completa, esos controles pasan al pie del visor. El lateral abre **Archivos**, **Páginas**, **Marcadores**, **Capas**, **Anotaciones** y **Firmas**. Pulsa Ctrl+F para buscar, F3 para ir a la siguiente coincidencia y Mayús+F3 para volver a la anterior.
+- [Primeros pasos y preferencias](#primeros-pasos-y-preferencias)
+- [Lectura, navegación y búsqueda](#lectura-navegación-y-búsqueda)
+- [Mesa de trabajo, ventanas y páginas](#mesa-de-trabajo-ventanas-y-páginas)
+- [Edición, formularios y anotaciones](#edición-formularios-y-anotaciones)
+- [Planos y mediciones](#planos-y-mediciones)
+- [Firmas digitales, protección y censura](#firmas-digitales-protección-y-censura)
+- [Exportar, imprimir, comprimir y PDF/A](#exportar-imprimir-comprimir-y-pdfa)
+- [Preparar los modelos de OCR](#preparar-los-modelos-de-ocr)
 
-**Recuperación y cancelación.** Después de un cierre inesperado, PDFiu ofrece reabrir las copias locales con cambios pendientes. Guárdalas con un nombre nuevo. Puedes cancelar las operaciones que muestran **Cancelar** junto al progreso. En los lotes, los archivos ya guardados quedan disponibles en la carpeta de salida.
+---
 
-**Archivo.** Crea un PDF en blanco, desde imágenes ordenadas y giradas o desde una imagen del portapapeles. **Volver a la versión guardada** relee el archivo del disco. **Abrir otra vista del PDF** abre una ventana de lectura con su propia página y zoom. **Preparar copia para compartir** guarda una copia y la pone en el portapapeles como archivo.
+## Primeros pasos y preferencias
 
-**Impresión.** Pulsa Ctrl+P o elige **Archivo → Imprimir…**. Escoge impresora o **Guardar como PDF**, papel, orientación y páginas. La vista previa recorre las caras que se van a imprimir y avisa si se recortará contenido. Puedes imprimir a escala real, ajustar al papel, definir un porcentaje, dividir un plano en mosaico con solape, poner varias páginas por hoja o preparar un folleto. En Windows, **Propiedades de la impresora…** abre el panel del fabricante. El trabajo usa los ajustes que aceptes en ese panel, sin modificar los valores predeterminados de Windows. Las opciones del fabricante, como su propia escala o distribución, también se aplican al trabajo. El PDF preparado desde este diálogo reproduce la impresión como imagen.
+- **Arranque y visita guiada.** En el primer inicio, **Ver bienvenida** abre el documento de ejemplo y te guía paso a paso para abrir un anexo, unir ambos archivos y guardar el resultado. Puedes repetirla desde **Ayuda → Visita guiada…** o recorrer doce funciones clave en **Ayuda → Guía de herramientas…**. Deja el ratón sobre cualquier herramienta para leer su explicación.
+- **Ejecutar desde el código fuente.** Prepara el entorno indicado en el [README](README.md#ejecutar-gratis-desde-el-código-fuente) y abre `Iniciar PDFiu.cmd`. Puedes arrastrar un PDF sobre el lanzador o varios sobre la ventana.
+- **Documentos recientes.** **Archivo → Documentos recientes** recuerda hasta diez PDF abiertos (también visibles al iniciar sin documento) y permite vaciar la lista.
+- **Preferencias.** En **Edición → Preferencias** puedes configurar:
+  - Ajuste inicial de zoom (**Ajustar página** o **Ajustar ancho**).
+  - Recordar la última carpeta usada al abrir o guardar.
+  - **Comprobar actualizaciones al iniciar** (desactivado por defecto; también puedes comprobar manualmente en **Ayuda → Buscar actualizaciones…**).
+  - **Idioma de la interfaz** (idioma del sistema, Español o English; se aplica al reiniciar PDFiu).
+  - **Favoritos:** crea tu panel personal desde la estrella **Favoritos → Personalizar…** o con clic derecho sobre cualquier herramienta.
+- **Recuperación y cancelación.** Tras un cierre inesperado, PDFiu ofrece reabrir las copias locales con cambios pendientes para guardarlas con un nombre nuevo. Las operaciones largas muestran un botón **Cancelar**; en lotes, los archivos ya guardados permanecen en la carpeta de salida.
+- **Actualizar el instalador de Windows.** Ejecuta el instalador nuevo: conserva la carpeta de instalación y tus preferencias. Si PDFiu está abierto, te permite guardar y cerrar antes de continuar.
 
-**PDF/A.** En **Archivo → Guardar copia PDF/A** elige PDF/A-1b, 2b o 3b según lo que te pidan. Instala por separado Ghostscript, veraPDF y un Java compatible. El diálogo permite localizar el ejecutable de Ghostscript y el archivo `greenfield-apps-*.jar` de veraPDF. PDFiu guarda la copia después de validarla con veraPDF. Si vas a firmar el expediente, convierte y valida antes de firmar.
+---
 
-**Atajos.** En Windows, Ctrl+O abre, Ctrl+S guarda, Ctrl+Mayús+S guarda como, Ctrl+P imprime, Ctrl+D abre las propiedades y Ctrl+W cierra el PDF. En macOS, usa ⌘ para abrir, guardar, imprimir y cerrar, y ⌘+I para las propiedades. Los menús muestran el atajo principal de cada acción.
+## Lectura, navegación y búsqueda
 
-**Lectura.** En **Vista**, pulsa **Enfocar documento** o **F9** para ocultar los paneles. **Pantalla completa** o **F11** deja visibles el PDF y la barra inferior con las páginas y el zoom. Vuelve a la vista anterior con **Esc** o **F11**.
+- **Desplazamiento y zoom.** La rueda del ratón recorre las páginas en modo continuo. Usa **Ctrl + rueda**, indica un porcentaje o pulsa **Página** / **Ancho**. Con zoom ampliado, mantén pulsado **Espacio** y arrastra para moverte por la hoja, o usa el recuadro del **Navegador** en la izquierda.
+- **Paneles y modo lectura.** El lateral izquierdo da acceso a **Archivos**, **Páginas**, **Marcadores**, **Capas**, **Anotaciones** y **Firmas**. En ventanas estrechas el panel de herramientas se recoge automáticamente. Pulsa **F9** (**Enfocar documento**) para ocultar paneles o **F11** (**Pantalla completa**); sal con **Esc** o **F11**.
+- **Múltiples vistas y creación rápida.** **Archivo → Abrir otra vista del PDF** abre una segunda ventana de lectura con su propia página y zoom. También puedes crear un PDF en blanco, desde imágenes ordenadas y giradas o desde una imagen del portapapeles, recargar con **Volver a la versión guardada** o usar **Preparar copia para compartir** para copiar el archivo al portapapeles.
+- **Copiar texto e imágenes.** Arrastra sobre el texto y pulsa **Ctrl+C** (en escaneos, aplica OCR primero). **Copiar página** copia la hoja completa como imagen para pegarla en Word o correo; **Guardar PNG** la exporta como archivo.
+- **Búsqueda y búsqueda avanzada.** Pulsa **Ctrl+F**, escribe y pulsa **Enter** (**F3** / **Mayús+F3** para saltar entre coincidencias). Marca **Distinguir tildes** para diferenciar `medicion` de `medición`. En **Búsqueda avanzada**, usa operadores en mayúsculas y comillas para frases exactas, por ejemplo `(plano OR croquis) AND NOT borrador` o `"health and safety"`. Selecciona un resultado y pulsa **Coincidencias de la página…** para elegir un fragmento concreto.
 
-**Buscar texto.** Escribe para ver coincidencias sin salir de la página. Marca **Distinguir tildes** si quieres que `medicion` y `medición` se busquen por separado. En **Búsqueda avanzada**, `(plano OR croquis) AND NOT borrador` encuentra todas las páginas que tienen alguno de los dos primeros términos y carecen de «borrador». Escribe los operadores en mayúsculas y pon entre comillas una palabra completa o una frase, como `"health and safety"`. Deja el ratón sobre la casilla para ver más ejemplos. Selecciona un resultado y pulsa **Coincidencias de la página…** para elegir un fragmento.
+### Atajos principales
 
-Para iniciar PDFiu desde el código, prepara el entorno indicado en el [README](README.md#ejecutar-desde-el-código) y abre **Iniciar PDFiu.cmd**. Puedes arrastrar un PDF sobre el lanzador o varios sobre la ventana.
+| Acción | Windows | macOS |
+| --- | --- | --- |
+| Abrir PDF | `Ctrl+O` | `⌘+O` |
+| Nueva ventana | `Ctrl+N` | `⌘+N` |
+| Guardar / Guardar como | `Ctrl+S` / `Ctrl+Mayús+S` | `⌘+S` / `⌘+Mayús+S` |
+| Imprimir | `Ctrl+P` | `⌘+P` |
+| Propiedades del documento | `Ctrl+D` | `⌘+I` |
+| Buscar / Siguiente / Anterior | `Ctrl+F` / `F3` / `Mayús+F3` | `⌘+F` / `F3` / `Mayús+F3` |
+| Deshacer / Rehacer | `Ctrl+Z` / `Ctrl+Y` | `⌘+Z` / `⌘+Y` |
+| Enfocar / Pantalla completa | `F9` / `F11` | `F9` / `F11` |
+| Cerrar PDF | `Ctrl+W` | `⌘+W` |
+| Desplazar con zoom | Mantener `Espacio` + arrastrar | Mantener `Espacio` + arrastrar |
 
-En el primer inicio, **Ver bienvenida** abre el PDF y resalta el control que debes usar para abrir un anexo, seleccionar ambos archivos, unirlos y guardar el resultado. Después puedes continuar con las herramientas principales. **Ahora no** oculta el aviso. Puedes repetir la práctica desde **Ayuda → Visita guiada…**. **Ayuda → Guía de herramientas…** recorre doce funciones, incluidas extraer páginas, añadirlas arrastrando, desbloquear y comprimir. Puedes avanzar con **Siguiente** para localizarlas. Deja el ratón sobre las herramientas para leer su explicación. **Buscar** o **Ctrl+F** abre los resultados con página y contexto. Pulsa un resultado o usa las flechas para navegar.
+---
 
-**Archivo → Documentos recientes** recupera hasta diez PDF abiertos. Los últimos también aparecen al iniciar sin un documento. Puedes borrar la lista desde ese menú. En **Edición → Preferencias → Idioma de la interfaz** puedes elegir el idioma del sistema, Español o English. Reinicia PDFiu para aplicar el cambio. La visita y los PDF de ejemplo se abren en el idioma elegido.
+## Mesa de trabajo, ventanas y páginas
 
-En Windows x64 también puedes usar una compilación de PDFiu. En **Edición → Preferencias** puedes elegir el zoom inicial, recordar la última carpeta y personalizar favoritos. En **Ayuda** puedes ver la versión y buscar actualizaciones si la compilación incluye un canal.
+- **Mesa de trabajo.** Abre o arrastra varios PDF a la ventana. Selecciona uno o varios en **Archivos** (con casillas, `Ctrl` o `Mayús`) para operar en lote; el panel derecho indica siempre a qué archivos afecta cada herramienta. Pulsa **Supr** para quitar documentos de la lista sin borrarlos del disco.
+- **Unir PDFs.** Selecciona varios archivos y pulsa **Unir PDFs**. Ordena la lista y activa **Crear índice** para generar un marcador por archivo. El resultado reemplaza a los originales guardados; los que tengan cambios pendientes siguen abiertos.
+- **Integración con Windows.** Con el instalador de Windows puedes elegir PDFiu como lector predeterminado para `.pdf` en **Configuración → Aplicaciones → Aplicaciones predeterminadas**. En el Explorador, selecciona varios PDF y haz clic derecho en **Combinar archivos con PDFiu** (en Windows 11, dentro de **Mostrar más opciones**).
+- **Reordenar, girar, extraer e insertar páginas.** En **Páginas**, arrastra miniaturas para reordenar, gira o elimina páginas, o extrae rangos como `1,3-5`. También puedes soltar PDF del Explorador entre miniaturas para insertar sus páginas o arrastrar miniaturas entre dos ventanas de PDFiu (**Archivo → Nueva ventana** o **Mover PDF a otra ventana**). `Ctrl+Z` deshace la inserción.
+- **Varias páginas por hoja.** En **Documento → Varias páginas por hoja…** elige 2, 4, 6, 9 o 16 páginas, una cuadrícula personalizada o todas en una hoja, en A4, A3 o Carta. La copia incluye el contenido de página (las anotaciones y campos interactivos permanecen en el original).
+- **Procesos de expediente.** En **Documento → Proceso de expediente…** encadena OCR, numeración y paso al flujo de firma sobre varios archivos, y guarda los ajustes como receta reutilizable.
 
-Para actualizar, ejecuta el instalador nuevo. Por defecto usa la carpeta de tu instalación anterior. Si PDFiu está abierto, el instalador te ofrece cerrar sus ventanas y puedes guardar los cambios desde PDFiu antes de continuar.
+---
 
-## Mesa de trabajo y Windows
+## Edición, formularios y anotaciones
 
-En **Archivos**, selecciona uno o varios PDF de la mesa y pulsa **Supr** para quitarlos de la lista sin borrar los archivos del disco.
+- **Editar texto existente.** En **Editar → Editar texto**, haz clic en un bloque compatible y confirma con **Enter**. Conserva la fuente original cuando admite los caracteres nuevos; no redistribuye párrafos ni modifica texto dentro de imágenes escaneadas.
+- **Añadir texto y anotaciones.** En **Anotar** puedes añadir texto libre, resaltar, escribir notas o dibujar rectángulos, óvalos, líneas y flechas con color, grosor, opacidad, trazo discontinuo o relleno suave. Desde el **Panel de anotaciones** puedes localizarlas, moverlas, redimensionarlas o eliminarlas. `Ctrl+Z` y `Ctrl+Y` deshacen y rehacen durante la sesión.
+- **Formularios AcroForm.** Al abrir un formulario, los campos editables se resaltan en azul. Haz clic para escribir (`Enter` guarda campos de una línea, `Ctrl+Enter` los multilínea, `Esc` cancela). Usa **Resaltar campos** para ocultar el fondo o **Editar → Campos y respuestas** para listar, vaciar o fijar las respuestas. En formularios híbridos XFA/AcroForm, PDFiu ofrece trabajar sobre una copia AcroForm (conserva el original si el trámite exige XFA dinámico).
+- **Encabezados, pies y numeración.** **Editar → Encabezados y pies** admite varias líneas, fuentes Helvetica/Times/Courier, negrita, cursiva, subrayado y variables de **Página**, **Total** y **Archivo** con vista previa (también en lote). Para numerar rápidamente, usa **Editar → Numerar páginas…**.
 
-Con el instalador de Windows, busca **.pdf** en **Configuración → Aplicaciones → Aplicaciones predeterminadas** para elegir PDFiu como lector. Para unir archivos, selecciónalos en el Explorador y haz clic derecho en **Combinar archivos con PDFiu**. En Windows 11, busca la opción en **Mostrar más opciones**. Se abre el diálogo donde puedes ordenar los archivos antes de unirlos.
+---
 
-## Exportar documentos
+## Planos y mediciones
 
-En **Archivo → Exportar → Word (.docx)**, **Con formato** mantiene editable el texto y reconstruye tamaños, fuentes, colores, imágenes y tablas. La distribución es aproximada, especialmente si hay columnas o dibujos complejos. Las páginas sin texto editable se incluyen como imagen. **Texto y tablas básicos** usa el formato de Word y permite aplicar OCR a las páginas sin texto.
+- **Comparar dos PDF.** En **Planos → Planos y revisiones → Comparar dos PDF** elige original y revisión:
+  - **Diferencias:** destaca lo añadido en verde, lo quitado en rojo y los cambios de color en ámbar, atenuando lo común. Permite ajustar tolerancia y alineación en milímetros.
+  - **En paralelo:** sincroniza desplazamiento, zoom y página.
+  - **Superponer:** tiñe la revisión y vuelve transparente su fondo blanco.
+- **Capas.** El panel **Capas** permite activar o desactivar las capas visibles del plano.
+- **Calibrar y medir.** En **Planos → Medir plano**, calibra con dos puntos a distancia conocida o introduce una escala `1:N` para medir longitudes, perímetros y superficies.
+- **Superficies guardadas.** En **Planos → Superficies → Nueva superficie**, marca los vértices y pulsa **Ctrl+Enter**. Cada medición se guarda como anotación PDF con relleno translúcido y queda listada en el panel para localizarla al reabrir el archivo.
 
-En los diálogos de exportación puedes elegir todo el documento, la página actual o un rango. **Excel (.xlsx)** y **CSV** extraen tablas; **TXT** exporta texto plano. Para extraer tablas de un escaneo, ejecuta el OCR del documento y activa la detección de columnas alineadas.
+---
 
-**Archivo → Exportar → Markdown (.md)** extrae párrafos y tablas, con un encabezado para cada página del PDF. Puedes aplicar OCR a las páginas sin texto, alternar entre la vista previa y el Markdown y copiarlo o guardarlo directamente desde la vista previa.
+## Firmas digitales, protección y censura
 
-## Firmas, edición y herramientas
+- **PDF firmados y protegidos.** Introduce la contraseña de apertura para leer el PDF y consultar sus firmas. Si desbloqueas o editas un PDF firmado, PDFiu avisa y crea una copia sin firmas; guárdala con otro nombre para conservar el original firmado.
+- **Firmar con certificado.** Pulsa **Firmar con certificado** y dibuja el recuadro en la página. PDFiu lee los certificados RSA vigentes con clave privada y uso de firma del almacén de Windows y también admite archivos `.p12` / `.pfx`. Muestra titular, DNI/NIE/NIF (si figura), empresa, emisor y vigencia. La firma es PAdES básica con SHA-256. *(El sellado de tiempo y la validación de larga duración quedan fuera de esta versión).*
+- **Varias firmas, varias páginas y lotes.** Puedes añadir firmas sucesivas en zonas libres (los campos existentes se marcan en naranja), firmar todas las páginas de un documento manteniendo la posición relativa, o firmar varios archivos en lote con **Firmar lote…** (Windows puede pedir el PIN más de una vez al crearse una firma por página).
+- **Explorar firmas.** Cuando un PDF contiene firmas, una cinta superior y el panel **Firmas** muestran titular, DNI/NIE/NIF, empresa, emisor, algoritmo, vigencia, fecha declarada y cobertura. Esta lectura es informativa e independiente de la validación de confianza de la cadena.
+- **Desbloquear y proteger.** **Proteger → Desbloquear PDF** retira restricciones de uso en una copia (`nombre_unlocked.pdf`). También puedes cifrar una copia con contraseña de apertura.
+- **Censurar datos.** En **Proteger → Censurar datos**, marca las zonas a ocultar y pulsa **Guardar copia censurada**. Las páginas marcadas se convierten en imagen eliminando por completo el contenido oculto; el resto conserva texto y vectores. Puedes activar **Con texto seleccionable (OCR)** para recuperar el texto visible. La copia omite formularios, anotaciones, marcadores y adjuntos: revísala antes de compartirla.
 
-- **Firmar con certificado.** Abre el PDF, pulsa el botón y arrastra sobre la página para dibujar el recuadro. PDFiu consulta los almacenes personales del usuario actual y del equipo. Ofrece certificados RSA vigentes con clave privada y uso de firma. Al firmar, Windows puede pedir el PIN o comprobar los permisos sobre la clave. El selector muestra el titular, el DNI/NIE/NIF cuando figura en el certificado, la empresa, el emisor y la vigencia. También admite archivos `.p12` y `.pfx`. Guarda el PDF firmado con un nombre distinto al del original. La firma es PAdES básica con SHA-256.
-- **Explorar firmas.** Cuando PDFiu detecta firmas digitales, aparece una cinta sobre el documento. Pulsa **Ver firma** o **Ver firmas** para abrir la lista, o pulsa un recuadro de firma en la página para ver los detalles de esa firma. Las firmas sin recuadro se pueden consultar desde la cinta. El panel muestra titular, DNI/NIE/NIF si está declarado en el certificado, empresa, emisor, algoritmo, periodo de vigencia, fecha declarada y cobertura. La detección y la lectura de esos datos son independientes de la validación criptográfica y de confianza.
-- **Varias firmas en un PDF.** Abre la copia firmada, pulsa **Firmar con certificado** y selecciona otro espacio y otro certificado. Los recuadros naranjas indican campos reservados. Si dibujas encima, PDFiu te pide elegir otra zona.
-- **Mesa de trabajo.** Usa **Abrir** (Ctrl+O) o arrastra uno o varios PDFs. PDFiu recuerda la última carpeta del diálogo. **Guardar** (Ctrl+S) usa la ubicación del archivo abierto y pide confirmación si va a sustituirlo. **Guardar como…** (Ctrl+Mayús+S) permite elegir otro nombre o carpeta. La X de la barra superior o Ctrl+W cierran el PDF activo. El menú del botón derecho sobre un archivo ofrece las mismas acciones. PDFiu avisa si hay cambios pendientes.
-- **Páginas entre ventanas.** Usa **Archivo → Nueva ventana** (Ctrl+N) para abrir otro PDF o **Mover PDF a otra ventana** para separar el documento que ya tienes abierto. Abre **Páginas** en ambas ventanas. Selecciona miniaturas con Ctrl o Mayús y arrástralas a la otra ventana. La línea azul muestra dónde se copiarán. También puedes soltar uno o varios archivos PDF del Explorador entre miniaturas para insertar todas sus páginas. Ctrl+Z deshace la inserción en el destino.
-- **Firmar varias páginas.** En firma normal, dibuja el recuadro y elige la página actual o todas las páginas del PDF. PDFiu conserva la posición relativa aunque cambie el tamaño o la orientación de la hoja, y comprueba si se solapa con otro campo de firma.
-- **Operaciones en la mesa.** Marca las casillas de varios PDF o selecciónalos con Ctrl o Mayús. El panel de herramientas indica a qué archivos se aplican las acciones. Al abrir **Páginas** o volver a un solo archivo, las herramientas indican el nombre del PDF abierto.
-- **Exportar en lote.** Elige un formato en **Exportar**, comprueba los PDF en **Aplicar a** y pulsa **Elegir carpeta…**. Al terminar puedes ver los nombres generados y pulsar **Abrir carpeta**. Word, Excel, CSV, Markdown y TXT usan nombres como `Plano - convertido.docx`. PNG guarda una imagen por página, por ejemplo `Plano - página 003.png`. Los nombres repetidos llevan un sufijo.
-- **Varias páginas por hoja.** En **Documento → Varias páginas por hoja…** puedes elegir 2, 4, 6, 9 o 16 páginas, una cuadrícula personalizada o todas las páginas en una sola hoja. Puedes elegir A4, A3 o Carta y la orientación. La copia para imprimir contiene el contenido de las páginas. Las anotaciones y los campos interactivos quedan en el original.
-- **Firmar un lote.** Selecciona varios PDF y pulsa **Firmar con certificado**, o elige archivos del disco con **Firmar lote…**. Puedes indicar una página o marcar **Todas las páginas de este PDF** por archivo. Con **Usar este recuadro en todo el lote…** puedes colocarlo en la misma página de todos, en todas las páginas o respetar las páginas elegidas por archivo. Revisa cada PDF antes de elegir el certificado. Se crea una firma digital por página, así que Windows puede pedir el PIN más de una vez.
-- **Unir.** Selecciona varios PDFs en la mesa y pulsa **Unir PDFs**. Ajusta el orden y activa **Crear índice** si quieres un marcador por archivo. El resultado reemplaza en la mesa a los originales guardados. Los originales con cambios o censura pendientes se quedan abiertos.
-- **Planos y revisiones.** En **Planos → Planos y revisiones → Comparar dos PDF** elige original y revisión. La ventana se abre maximizada y puedes restaurarla o cambiar su tamaño. **Diferencias** destaca lo añadido en verde, lo quitado en rojo y los cambios de color en ámbar. El contenido común queda atenuado. Ajusta la tolerancia para ignorar diferencias pequeñas y usa el desplazamiento en milímetros para alinear los planos. **En paralelo** sincroniza desplazamiento, zoom y avance de página. **Superponer** tiñe la revisión y deja su fondo blanco transparente. En **Capas** puedes cambiar qué capas se muestran en el visor. **Planos → Medir plano** permite calibrar con una distancia conocida o introducir 1:N.
-- **Superficies guardadas.** En **Planos → Superficies**, pulsa **Nueva superficie**, marca los vértices y pulsa Ctrl+Enter. El panel muestra el área, la página y el color. Haz clic en una entrada para localizarla. Cada superficie se guarda como anotación PDF con relleno translúcido. Pulsa **Guardar** para conservarla al reabrir el archivo.
-- **Lectura continua.** La rueda del ratón desplaza el documento a través de las páginas. Ctrl + rueda cambia el zoom. La página que estás viendo queda seleccionada en el panel lateral. Las miniaturas se generan al desplazarte por la lista. Pulsa F9 para enfocar el documento u oculta cada panel desde la barra superior.
-- **Historial y formas.** Usa Ctrl+Z y Ctrl+Y para deshacer o rehacer ediciones del documento activo durante la sesión. En el panel de anotaciones, selecciona una marca para moverla o redimensionarla. El cambio de tamaño se aplica a rectángulos, óvalos y líneas.
-- **Procesos de expediente.** En **Documento → Proceso de expediente…** puedes aplicar OCR y numeración a los archivos seleccionados y abrir el flujo de firma al terminar. Guarda los ajustes como receta para reutilizarlos.
-- **Editar.** Arrastra páginas en el panel para reordenarlas. Puedes girar, quitar o extraer la página actual y añadir texto sobre el documento. Para operar sobre páginas de un PDF firmado, abre el original sin firmar.
-- **Zoom y texto.** Usa Ctrl + rueda, indica un porcentaje o pulsa **Página** o **Ancho**. Arrastra el cursor sobre el texto y pulsa Ctrl+C. Si la página es un escaneo sin capa de texto, aplica OCR primero.
-- **Moverte con zoom.** Con el puntero sobre el PDF, mantén pulsado **Espacio** y arrastra con el botón izquierdo. Al soltar Espacio vuelves a la herramienta que estabas usando. Si la página no cabe en el visor, el **Navegador** de la izquierda marca la zona visible. Arrastra su recuadro o pulsa otra parte de la miniatura para desplazarte.
-- **Espacio para leer.** En una ventana estrecha, PDFiu recoge el panel derecho. Pulsa **Herramientas** para recuperarlo o **Enfocar** (F9) para ocultar ambos paneles. En **Edición** siguen disponibles Deshacer y Rehacer.
-- **Editar texto existente.** En **Editar → Editar texto**, haz clic en el texto y confirma con Enter. PDFiu modifica el bloque de texto del PDF con su fuente original cuando admite los caracteres nuevos. Comprueba cómo queda si cambias la longitud. El editor no redistribuye los párrafos ni modifica las imágenes de los escaneos.
-- **Formularios AcroForm.** PDFiu identifica el formulario al abrirlo y resalta en azul los campos editables. Haz clic y escribe sobre la página. Enter guarda el campo de una línea, Ctrl+Enter guarda un campo de varias líneas y Esc cancela la edición actual. Puedes ocultar el fondo con **Resaltar campos** o abrir **Editar → Campos y respuestas** para listar, vaciar o fijar los campos. Si un PDF combina XFA y AcroForm, PDFiu ofrece preparar una copia al pulsar un campo. Esa copia conserva los campos compatibles y pierde la lógica dinámica XFA. Conserva el original para trámites que requieran XFA.
-- **Búsqueda y anotaciones.** Pulsa **Buscar** en la barra superior o **Ctrl+F**, escribe el texto y pulsa Enter. En **Anotar** puedes resaltar texto, añadir notas, o dibujar rectángulos, óvalos, líneas y flechas. Al dibujar, elige color, grosor, opacidad, línea discontinua o relleno suave. Usa **Panel de anotaciones** para localizar o eliminar marcas.
-- **Marcadores y estructura.** Pulsa **Marcadores** para ver el índice y las etiquetas del documento y saltar a sus páginas cuando haya un destino.
-- **Encabezados y pies.** En **Editar → Encabezados y pies**, escribe una o varias líneas. Puedes aplicar Helvetica, Times o Courier, negrita, cursiva y subrayado a fragmentos del texto. Los botones **Página**, **Total** y **Archivo** insertan valores variables. La vista previa muestra la primera página elegida. En lotes se aplica el mismo intervalo a todos los documentos y se guardan copias en la carpeta seleccionada.
-- **Numeración rápida.** Pulsa **Editar → Numerar páginas…** para elegir el intervalo, el número inicial, la posición y la alineación. La numeración avanza en las páginas del intervalo.
-- **Desbloquear.** Abre el PDF y pulsa **Proteger → Desbloquear PDF**. Si se puede abrir sin contraseña, PDFiu quita las restricciones sin pedirla. Pulsa **Guardar** para conservar la copia con el nombre sugerido `nombre_unlocked.pdf`. Si el archivo exige una contraseña para abrirlo, PDFiu la pide al abrir el archivo.
-- **Guardar y favoritos.** PDFiu pregunta antes de sustituir un archivo existente. Para crear tu panel personal, pulsa la estrella **Favoritos** y **Personalizar…**, o usa el menú del botón derecho sobre una herramienta. La selección se guarda entre sesiones.
-- **Preparar copias.** En **Documento** puedes extraer rangos como `1,3-5` a otro PDF o elegir **Comprimir copia…**. **Tamaño reducido · 150 ppp** es el perfil inicial. **Extremo · 96 ppp** prioriza copias pequeñas para enviar y puede perder detalles en planos escaneados. **Estimar tamaño** calcula una aproximación con los datos de hasta ocho páginas. **Comprimir ahora** prepara directamente una copia temporal si ocupa menos. Usa **Comparar al 100 %** para revisarla junto al original. El texto y el dibujo vectorial se conservan. En **Proteger** puedes cifrar una copia con contraseña de apertura.
-- **Censurar.** En **Proteger → Censurar datos**, marca los recuadros y pulsa **Guardar copia censurada**. PDFiu convierte en imagen las páginas marcadas y borra el contenido dentro de los recuadros. Las demás conservan su texto y dibujo vectorial. **Con texto seleccionable (OCR)** vuelve a reconocer el texto visible de las páginas marcadas. La copia omite formularios interactivos, anotaciones, marcadores y adjuntos. Revisa la copia antes de compartirla.
-- **Capturar.** Pulsa **Copiar página** y pega en Word con Ctrl+V. **Guardar PNG** exporta la página completa como archivo.
-- **OCR.** Elige la página actual o el documento completo y selecciona español, inglés o ambos. PDFiu añade una capa de texto seleccionable a las páginas escaneadas y conserva su aspecto. Guarda el PDF para conservar el resultado.
+---
 
-El sellado de tiempo y la validación de larga duración quedan fuera de esta versión.
+## Exportar, imprimir, comprimir y PDF/A
 
-Las recetas de compilación para el instalador de Windows y el paquete de macOS están en `packaging/LEEME.md`.
+- **Exportar documentos.** Desde **Archivo → Exportar**, elige todo el documento, la página actual o un rango (también en lote seleccionando varios PDF):
+  - **Word (`.docx`):** *Con formato* reconstruye texto editable, fuentes, colores, imágenes y tablas de forma aproximada; *Texto y tablas básicos* permite aplicar OCR a páginas sin texto.
+  - **Excel (`.xlsx`) y CSV:** extraen tablas (en escaneos, aplica OCR primero y activa la detección de columnas alineadas).
+  - **Markdown (`.md`):** extrae párrafos y tablas con vista previa, OCR opcional y copia directa.
+  - **TXT y PNG:** texto plano o una imagen por página.
+- **Impresión.** Pulsa **Ctrl+P** para abrir la vista previa con aviso de recortes. Admite tamaño real, ajuste al papel, porcentaje, mosaico con solape para planos, varias páginas por hoja y folleto. En Windows, **Propiedades de la impresora…** abre el panel del fabricante sin cambiar la configuración global del sistema. **Guardar como PDF** desde el diálogo de impresión reproduce la salida como imagen.
+- **Comprimir copia.** En **Documento → Comprimir copia…**, elige **Tamaño reducido · 150 ppp** o **Extremo · 96 ppp**, pulsa **Estimar tamaño** (muestrea hasta ocho páginas) y revisa el resultado con **Comparar al 100 %**. El texto y el dibujo vectorial se conservan.
+- **PDF/A.** **Archivo → Guardar copia PDF/A** genera y valida PDF/A-1b, 2b o 3b usando **Ghostscript**, **veraPDF** (`greenfield-apps-*.jar`) y **Java** instalados por separado. Si vas a firmar el expediente, convierte y valida antes de firmar.
 
-La interfaz incluye una selección de [Fluent UI System Icons](https://github.com/microsoft/fluentui-system-icons), versión 1.1.347 del paquete `@fluentui/svg-icons`. Los SVG se cargan desde el equipo y la licencia MIT del conjunto se conserva en `assets/fluent/LICENSE`.
+---
 
 ## Preparar los modelos de OCR
 
-Después de instalar las dependencias del [README](README.md#ejecutar-desde-el-código), ejecuta estos comandos en PowerShell desde la carpeta del proyecto.
+Con **Documento → Reconocer texto (OCR)** puedes añadir una capa de texto seleccionable en español, inglés o ambos sobre la página actual o todo el documento conservando el aspecto original. Guarda el PDF para conservar el resultado.
+
+Si ejecutas PDFiu desde el código fuente (tras instalar las dependencias del [README](README.md#ejecutar-gratis-desde-el-código-fuente)), descarga los modelos desde PowerShell en la carpeta del proyecto:
 
 ```powershell
 New-Item -ItemType Directory -Force -Path .\runtime\tessdata | Out-Null
@@ -98,4 +127,6 @@ foreach ($lang in @('spa', 'eng')) {
 }
 ```
 
-Abre PDFiu y usa **Documento → Reconocer texto (OCR)** para elegir las páginas y el idioma.
+---
+
+*Recetas de empaquetado para Windows y macOS en [packaging/LEEME.md](packaging/LEEME.md). Avisos de iconos y bibliotecas de terceros en [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).*

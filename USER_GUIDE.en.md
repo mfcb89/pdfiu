@@ -39,7 +39,7 @@ Open an original and a revision in the comparison dialog. **Side by side** synch
 
 ## Set up OCR models
 
-After [installing the Python dependencies](README.en.md#run-from-source), download the models from PowerShell in the repository folder.
+After [installing the Python dependencies](README.en.md#run-for-free-from-source), download the models from PowerShell in the repository folder.
 
 ```powershell
 New-Item -ItemType Directory -Force -Path .\runtime\tessdata | Out-Null
