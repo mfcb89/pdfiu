@@ -51,6 +51,8 @@ Guía práctica de uso de **PDFiu**. Todas las operaciones se ejecutan en tu equ
 | Imprimir | `Ctrl+P` | `⌘+P` |
 | Propiedades del documento | `Ctrl+D` | `⌘+I` |
 | Buscar / Siguiente / Anterior | `Ctrl+F` / `F3` / `Mayús+F3` | `⌘+F` / `F3` / `Mayús+F3` |
+| Paleta de comandos | `Ctrl+K` | `⌘+K` |
+| Preferencias | `Ctrl+,` | `⌘+,` |
 | Deshacer / Rehacer | `Ctrl+Z` / `Ctrl+Y` | `⌘+Z` / `⌘+Y` |
 | Enfocar / Pantalla completa | `F9` / `F11` | `F9` / `F11` |
 | Cerrar PDF | `Ctrl+W` | `⌘+W` |

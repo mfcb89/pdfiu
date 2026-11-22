@@ -840,8 +840,7 @@ class PDFiu(QMainWindow):
         find = add(edit, tr("Buscar texto"), self.open_search, key.Find)
         next_match = add(edit, tr("Siguiente coincidencia"), lambda: self.step_search(1), key.FindNext, "F3")
         previous_match = add(edit, tr("Coincidencia anterior"), lambda: self.step_search(-1), key.FindPrevious, "Shift+F3")
-        preference_keys = ("Ctrl+,",) if sys.platform == "darwin" else ("Ctrl+K", "Ctrl+,")
-        preferences = add(edit, tr("&Preferencias…"), self.show_preferences, key.Preferences, *preference_keys)
+        preferences = add(edit, tr("&Preferencias…"), self.show_preferences, key.Preferences, "Ctrl+,")
         preferences.setMenuRole(QAction.MenuRole.PreferencesRole)
         self.document_controls += (find, next_match, previous_match)
 

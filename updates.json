@@ -1,5 +1,5 @@
 {
-  "version": "0.10.39",
+  "version": "0.11.0",
   "url": "https://github.com/mfcb89/pdfiu/releases",
-  "notes": "Lector y editor de PDF local con OCR, firma digital, comparación de planos y exportación a Word, Excel y Markdown."
+  "notes": "Panel de anotaciones con tarjetas y filtro, paleta de comandos (Ctrl+K), filtro en marcadores, tema oscuro (Claro/Oscuro/Sistema) y registro local de errores."
 }
