@@ -302,8 +302,17 @@ def startup_screen(credit):
     return QSplashScreen(pixmap)
 
 
-@lru_cache(maxsize=160)
-def icon(name, size=16, color="#334353", *, filled_when_checked=False):
+_active_theme = "light"
+
+
+def icon_ink(primary=False):
+    if primary:
+        return "#ffffff"
+    return "#dce6f2" if _active_theme == "dark" else "#334353"
+
+
+@lru_cache(maxsize=320)
+def _render_icon(name, size, color, checked_color, disabled_color, filled_when_checked):
     stem = ICON_NAMES[name]
     sizes = sorted((16, 20, 24, 32), key=lambda grid: (abs(grid - size), -grid))
     regular = next(path for grid in sizes
@@ -311,11 +320,11 @@ def icon(name, size=16, color="#334353", *, filled_when_checked=False):
     variants = [(QIcon.State.Off, regular, color)]
     filled = ICON_PATH / f"{stem}_{size}_filled.svg"
     if filled_when_checked:
-        variants.append((QIcon.State.On, filled if filled.is_file() else regular, "#236152"))
+        variants.append((QIcon.State.On, filled if filled.is_file() else regular, checked_color))
     result = QIcon()
     for state, source_file, ink in variants:
         source = source_file.read_bytes()
-        for mode, tone in ((QIcon.Mode.Normal, ink), (QIcon.Mode.Disabled, "#8a979f")):
+        for mode, tone in ((QIcon.Mode.Normal, ink), (QIcon.Mode.Disabled, disabled_color)):
             renderer = QSvgRenderer(QByteArray(source.replace(b"<svg ", f'<svg fill="{tone}" '.encode("ascii"), 1)))
             for dpr in (1, 1.25, 1.5, 1.75, 2, 2.5, 3):
                 pixels = round(size * dpr)
@@ -328,11 +337,23 @@ def icon(name, size=16, color="#334353", *, filled_when_checked=False):
     return result
 
 
+def icon(name, size=16, color=None, *, filled_when_checked=False):
+    dark = _active_theme == "dark"
+    if color is None or (dark and color in ("#334353", "#3c4963")):
+        ink = "#dce6f2" if dark else "#334353"
+    else:
+        ink = color
+    checked_color = "#6ee7b7" if dark else "#236152"
+    disabled_color = "#5a6878" if dark else "#8a979f"
+    return _render_icon(name, size, ink, checked_color, disabled_color, filled_when_checked)
+
+
 class PanelRail(QFrame):
     def paintEvent(self, event):
         super().paintEvent(event)
         with QPainter(self) as painter:
-            painter.fillRect(self.width() - 1, 0, 1, self.height(), QColor("#dde5e1"))
+            border = QColor("#2b3440") if _active_theme == "dark" else QColor("#dde5e1")
+            painter.fillRect(self.width() - 1, 0, 1, self.height(), border)
 
 
 class TourSpotlight(QWidget):
@@ -597,6 +618,8 @@ QFrame#navigationRail QWidget#readerZoomGroup {
 QWidget#readerZoomGroup { background: transparent; }
 QFrame#shellBar { border-bottom: 1px solid #e0e8e3; }
 QFrame#footer { border-top: 1px solid #e0e8e3; }
+QFrame#docTabStrip { background: #f3f6f4; border-bottom: 1px solid #dce6e1; }
+QFrame#findBar { background: #f8faf9; border-bottom: 1px solid #dce6e1; }
 QFrame#sidebar, QFrame#navigationOverview, QWidget#workspaceFiles, QWidget#workspaceNavigation { background: #f3f6f4; }
 QFrame#navigationOverview { border-bottom: 1px solid #dce6e1; }
 QWidget#workspaceNavigation { border-right: 1px solid #dce6e1; }
@@ -732,9 +755,18 @@ STYLE += f'QComboBox::down-arrow {{ image: url("{(ICON_PATH / "chevron_down_16_r
 
 DARK_STYLE = """
 QMainWindow, QDialog, QWidget { background: #161b22; color: #e6edf3; font-family: "Segoe UI", "Helvetica Neue", Arial; font-size: 13px; }
-QFrame#topbar, QFrame#readerFooter, QFrame#statusBar { background: #1c222b; border-bottom: 1px solid #2b3440; }
-QFrame#readerFooter, QFrame#statusBar { border-top: 1px solid #2b3440; border-bottom: 0; }
-QFrame#rail { background: #181e26; border-right: 1px solid #2b3440; }
+QFrame#topbar, QFrame#shellBar, QFrame#readerFooter, QFrame#footer, QFrame#statusBar { background: #1c222b; border-bottom: 1px solid #2b3440; }
+QFrame#docTabStrip { background: #181e26; border-bottom: 1px solid #2b3440; }
+QFrame#findBar { background: #1c222b; border-bottom: 1px solid #2b3440; }
+QFrame#readerFooter, QFrame#footer, QFrame#statusBar { border-top: 1px solid #2b3440; border-bottom: 0; }
+QFrame#rail, QFrame#navigationRail { background: #181e26; border-right: 1px solid #2b3440; }
+QFrame#navigationRail QScrollArea#railScroll,
+QFrame#navigationRail QWidget#railViewport,
+QFrame#navigationRail QWidget#railSections,
+QFrame#readerControls,
+QWidget#readerGroup,
+QWidget#readerZoomGroup { background: transparent; }
+QFrame#navigationRail QWidget#readerZoomGroup { border-top: 1px solid #2b3440; }
 QFrame#sidebar, QFrame#navigationOverview, QWidget#workspaceFiles, QWidget#workspaceNavigation { background: #1a2028; }
 QFrame#navigationOverview { border-bottom: 1px solid #2b3440; }
 QWidget#workspaceNavigation { border-right: 1px solid #2b3440; }
@@ -872,8 +904,19 @@ def resolve_theme(preference):
     return "light"
 
 
+def refresh_widget_icons(application):
+    for widget in application.allWidgets():
+        if isinstance(widget, QPushButton):
+            meta = widget.property("iconGlyph")
+            if isinstance(meta, tuple) and len(meta) == 4:
+                glyph, size, primary, filled = meta
+                widget.setIcon(icon(glyph, size, "#ffffff" if primary else None, filled_when_checked=filled))
+
+
 def apply_theme(application, preference="system"):
+    global _active_theme
     mode = resolve_theme(preference)
+    _active_theme = mode
     palette = QPalette()
     if mode == "dark":
         palette.setColor(QPalette.ColorRole.Window, QColor("#161b22"))
@@ -891,4 +934,5 @@ def apply_theme(application, preference="system"):
     else:
         application.setPalette(application.style().standardPalette())
         application.setStyleSheet(STYLE)
+    refresh_widget_icons(application)
     return mode

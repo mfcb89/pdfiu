@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QButtonGroup, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QDockWidget, QDoubleSpinBox, QFileDialog, QFormLayout,
     QFrame, QGraphicsDropShadowEffect, QGraphicsScene, QGraphicsView, QGridLayout, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget,
     QListWidgetItem, QMainWindow, QMenu, QMessageBox, QPlainTextEdit, QProgressBar, QProgressDialog, QPushButton, QScrollArea, QSizePolicy, QSpinBox,
-    QStackedWidget, QStyle, QStyledItemDelegate, QStyleOptionViewItem, QTabWidget, QTextBrowser, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
+    QStackedWidget, QStyle, QStyledItemDelegate, QStyleOptionViewItem, QTabBar, QTabWidget, QTextBrowser, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
 )
 
 from pdf_ops import (
@@ -479,6 +479,53 @@ class PDFiu(QMainWindow):
         viewer_layout = QVBoxLayout(viewer_column)
         viewer_layout.setContentsMargins(0, 0, 0, 0)
         viewer_layout.setSpacing(0)
+
+        self.doc_tab_strip = QFrame(objectName="docTabStrip")
+        tab_strip_layout = QHBoxLayout(self.doc_tab_strip)
+        tab_strip_layout.setContentsMargins(8, 2, 8, 2)
+        tab_strip_layout.setSpacing(4)
+        self.doc_tabs = QTabBar()
+        self.doc_tabs.setDocumentMode(True)
+        self.doc_tabs.setExpanding(False)
+        self.doc_tabs.setTabsClosable(True)
+        self.doc_tabs.setElideMode(Qt.TextElideMode.ElideMiddle)
+        self.doc_tabs.setUsesScrollButtons(True)
+        self.doc_tabs.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.doc_tabs.currentChanged.connect(self.activate_doc_tab)
+        self.doc_tabs.tabCloseRequested.connect(self.close_doc_tab)
+        self.doc_tabs.customContextMenuRequested.connect(self.doc_tab_context)
+        tab_strip_layout.addWidget(self.doc_tabs, 1)
+        tab_strip_layout.addWidget(icon_button(tr("Abrir PDF"), "plus", self.open_dialog, size=26, glyph_size=16))
+        tab_strip_layout.addWidget(icon_button(tr("Nueva ventana"), "view-columns", self.new_window, size=26, glyph_size=16))
+        self.doc_tab_strip.hide()
+        viewer_layout.addWidget(self.doc_tab_strip)
+
+        self.find_bar = QFrame(objectName="findBar")
+        find_layout = QHBoxLayout(self.find_bar)
+        find_layout.setContentsMargins(10, 5, 10, 5)
+        find_layout.setSpacing(6)
+        self.find_input = QLineEdit()
+        self.find_input.setPlaceholderText(tr("Buscar en el PDF…"))
+        self.find_input.setClearButtonEnabled(True)
+        self.find_input.setMaximumWidth(320)
+        self.find_input.returnPressed.connect(lambda: self.step_search(1) if self.search_hits and self.search_result_key == self._current_search_key() else self.run_search(jump=True))
+        self.find_input.textChanged.connect(self.sync_find_input)
+        find_layout.addWidget(self.find_input, 1)
+        self.find_count = QLabel(objectName="muted")
+        self.find_count.setMinimumWidth(68)
+        find_layout.addWidget(self.find_count)
+        find_layout.addWidget(icon_button(tr("Coincidencia anterior (Mayús+F3)"), "chevron-up", lambda: self.step_search(-1), size=26, glyph_size=16))
+        find_layout.addWidget(icon_button(tr("Siguiente coincidencia (F3)"), "chevron-down", lambda: self.step_search(1), size=26, glyph_size=16))
+        self.find_accents_btn = QPushButton(tr("Tildes"))
+        self.find_accents_btn.setCheckable(True)
+        self.find_accents_btn.setToolTip(tr("Distinguir tildes"))
+        self.find_accents_btn.toggled.connect(self.sync_find_accents)
+        find_layout.addWidget(self.find_accents_btn)
+        find_layout.addWidget(button("Lista y avanzada", self.open_search_panel))
+        find_layout.addWidget(icon_button(tr("Cerrar búsqueda (Esc)"), "close", self.close_find_bar, size=26, glyph_size=16))
+        self.find_bar.hide()
+        viewer_layout.addWidget(self.find_bar)
+
         viewer_layout.addWidget(self.build_tour_strip())
         self.signature_strip = QFrame(objectName="signatureStrip")
         signatures = QHBoxLayout(self.signature_strip)
@@ -647,6 +694,7 @@ class PDFiu(QMainWindow):
             (self.comments_panel, "Anotaciones", "comments"), (self.signatures_panel, "Firmas", "signatures"),
         ):
             control = button("", lambda current=panel: self.choose_navigation(current, toggle=True))
+            control.setProperty("iconGlyph", (f"rail-{glyph}", 20, False, True))
             control.setIcon(icon(f"rail-{glyph}", 20, filled_when_checked=True))
             control.setIconSize(QSize(20, 20))
             control.setToolTip(tr(label))
@@ -744,6 +792,7 @@ class PDFiu(QMainWindow):
         size_menu.setAccessibleName(tr("Tamaño de página"))
         size_menu.setToolTip(tr("Tamaño de página"))
         size_menu.setProperty("role", "readerSize")
+        size_menu.setProperty("iconGlyph", ("rail-fit", 20, False, False))
         size_menu.setIcon(icon("rail-fit", 20))
         size_menu.setIconSize(QSize(20, 20))
         size_menu.setFixedSize(28, 30)
@@ -2131,7 +2180,9 @@ class PDFiu(QMainWindow):
         self.sync_tool_panel()
 
     def escape_view(self):
-        if self.fullscreen_state is not None:
+        if self.find_bar.isVisible():
+            self.close_find_bar()
+        elif self.fullscreen_state is not None:
             self.toggle_fullscreen()
         else:
             self.clear_mode()
@@ -2159,7 +2210,9 @@ class PDFiu(QMainWindow):
         self.focus_toggle.setVisible(has_document and not fullscreen)
         self.fullscreen_toggle.setVisible(has_document)
         self.fullscreen_toggle.setText(tr("Salir de pantalla completa") if fullscreen else tr("Pantalla completa"))
-        self.fullscreen_toggle.setIcon(icon("arrows-collapse-full" if fullscreen else "maximize"))
+        fullscreen_glyph = "arrows-collapse-full" if fullscreen else "maximize"
+        self.fullscreen_toggle.setProperty("iconGlyph", (fullscreen_glyph, 16, False, False))
+        self.fullscreen_toggle.setIcon(icon(fullscreen_glyph))
         self.fullscreen_toggle.setToolTip(tr("Salir con Esc o F11") if fullscreen else tr("Pantalla completa (F11)"))
 
     def eventFilter(self, watched, event):
@@ -2482,6 +2535,7 @@ class PDFiu(QMainWindow):
         self.update_redaction_strip()
         self.update_measure_scale()
         self.stash_workspace()
+        self.sync_doc_tabs()
 
     def update_page_controls(self):
         prefix = "" if self.reader_in_rail else "/ "
@@ -3378,6 +3432,73 @@ class PDFiu(QMainWindow):
         window.raise_()
         window.activateWindow()
 
+    def sync_doc_tabs(self):
+        with QSignalBlocker(self.doc_tabs):
+            while self.doc_tabs.count():
+                self.doc_tabs.removeTab(0)
+            active_index = -1
+            for row in range(self.work_list.count()):
+                item = self.work_list.item(row)
+                key = item.data(Qt.ItemDataRole.UserRole)
+                state = self.work_docs.get(key)
+                if state is None:
+                    continue
+                is_current = key == self.work_key
+                dirty = self.dirty if is_current else state.dirty
+                label = f"• {state.name}" if dirty else state.name
+                idx = self.doc_tabs.addTab(label)
+                self.doc_tabs.setTabData(idx, key)
+                self.doc_tabs.setTabToolTip(idx, str(state.saved_path or state.path))
+                if is_current:
+                    active_index = idx
+            if active_index >= 0:
+                self.doc_tabs.setCurrentIndex(active_index)
+        self.doc_tab_strip.setVisible(self.doc_tabs.count() > 0)
+
+    def _work_item_for_key(self, key):
+        for row in range(self.work_list.count()):
+            item = self.work_list.item(row)
+            if item.data(Qt.ItemDataRole.UserRole) == key:
+                return item
+        return None
+
+    def activate_doc_tab(self, index):
+        if index < 0 or self.job is not None:
+            return
+        key = self.doc_tabs.tabData(index)
+        if key == self.work_key:
+            return
+        item = self._work_item_for_key(key)
+        if item is not None:
+            self.activate_work_item(item)
+
+    def close_doc_tab(self, index):
+        if index < 0 or self.job is not None:
+            return
+        key = self.doc_tabs.tabData(index)
+        item = self._work_item_for_key(key)
+        if item is not None:
+            self.close_work_document(item)
+            self.sync_doc_tabs()
+
+    def doc_tab_context(self, position):
+        index = self.doc_tabs.tabAt(position)
+        if index < 0 or self.job is not None:
+            return
+        key = self.doc_tabs.tabData(index)
+        item = self._work_item_for_key(key)
+        if item is None:
+            return
+        menu = QMenu(self)
+        menu.addAction(tr("Mover PDF a otra ventana"), lambda: (self.move_to_new_window(item), self.sync_doc_tabs()))
+        if key == self.work_key:
+            menu.addAction(tr("Abrir otra vista del PDF"), self.open_secondary_view)
+            if self.saved_path or self.protected_source:
+                menu.addAction(tr("Abrir carpeta del archivo"), self.open_document_folder)
+        menu.addSeparator()
+        menu.addAction(tr("Cerrar pestaña"), lambda: self.close_doc_tab(index))
+        menu.exec(self.doc_tabs.mapToGlobal(position))
+
     def new_window(self):
         self.show_new_window(PDFiu())
 
@@ -3907,10 +4028,7 @@ class PDFiu(QMainWindow):
                       if self.redaction_boxes else tr("El PDF ya está guardado."))
             return True
         destination = None if as_copy else self.regular_save_target()
-        if destination:
-            if destination != confirmed_target and not self.confirm_overwrite(destination):
-                return False
-        else:
+        if not destination:
             suggested = self.name if not as_copy else tr("{0} - copia.pdf").format(Path(self.name).stem)
             folder = self.saved_path.parent if self.saved_path else self.preferences.value("archivos/ultima_carpeta", "")
             initial = Path(folder) / suggested if folder else Path(suggested)
@@ -4669,16 +4787,56 @@ class PDFiu(QMainWindow):
         if not visible and self.review_dock.isHidden():
             self.view.set_search_ranges({})
 
+    def _search_active(self):
+        return (self.review_mode == "search" and not self.review_dock.isHidden()) or self.find_bar.isVisible()
+
+    def _current_search_key(self):
+        return (self.path, self.query.text().strip(), self.search_accents.isChecked(), self.search_advanced.isChecked())
+
+    def sync_find_input(self, text):
+        if self.query.text() != text:
+            with QSignalBlocker(self.query):
+                self.query.setText(text)
+        self.schedule_search()
+
+    def sync_find_accents(self, checked):
+        if self.search_accents.isChecked() != checked:
+            with QSignalBlocker(self.search_accents):
+                self.search_accents.setChecked(checked)
+        self.schedule_search()
+
     def open_search(self):
         if self.path is None or self.job is not None:
             return
         if self.fullscreen_state is not None:
             self.toggle_fullscreen()
+        self.find_bar.show()
+        with QSignalBlocker(self.find_input):
+            self.find_input.setText(self.query.text())
+        with QSignalBlocker(self.find_accents_btn):
+            self.find_accents_btn.setChecked(self.search_accents.isChecked())
+        self.find_input.setFocus()
+        self.find_input.selectAll()
+        if self.find_input.text().strip():
+            self.schedule_search()
+
+    def open_search_panel(self):
+        if self.path is None or self.job is not None:
+            return
         if self.review_mode != "search" or self.review_dock.isHidden():
             self.show_review("search")
-            self.schedule_search()
         self.query.setFocus()
         self.query.selectAll()
+        if self.query.text().strip():
+            self.run_search(jump=False)
+
+    def close_find_bar(self):
+        self.find_bar.hide()
+        self.find_count.setText("")
+        if self.review_dock.isHidden() or self.review_mode != "search":
+            self.view.set_search_ranges({})
+            self.search_hits = []
+            self.search_cursor = -1
 
     def schedule_search(self, *_):
         self.search_pending = None
@@ -4690,17 +4848,24 @@ class PDFiu(QMainWindow):
         if self.search_job and self.job is not None:
             self.job.requestInterruption()
         self.search_timer.stop()
-        if self.review_mode != "search" or self.review_dock.isHidden():
+        if not self._search_active():
             return
+        if self.find_input.text() != self.query.text():
+            with QSignalBlocker(self.find_input):
+                self.find_input.setText(self.query.text())
+        if self.find_accents_btn.isChecked() != self.search_accents.isChecked():
+            with QSignalBlocker(self.find_accents_btn):
+                self.find_accents_btn.setChecked(self.search_accents.isChecked())
         if self.query.text().strip():
             self.search_timer.start()
         else:
             self.search_summary.setText(tr("Escribe para buscar en el PDF."))
+            self.find_count.setText("")
 
     def run_search(self, *, jump=True):
         self.search_timer.stop()
         term = self.query.text().strip()
-        if self.path is None or not term or self.review_mode != "search" or self.review_dock.isHidden():
+        if self.path is None or not term or not self._search_active():
             return
         if self.job is not None:
             self.search_pending = jump
@@ -4715,22 +4880,21 @@ class PDFiu(QMainWindow):
                 SearchQuery(term)
             except SearchSyntaxError as error:
                 self.search_summary.setText(str(error))
+                self.find_count.setText(tr("Error"))
                 return
         if self.search_result_key == key:
-            if jump and self.review_list.count():
-                if self.review_list.currentRow() < 0:
-                    self.review_list.setCurrentRow(0)
-                else:
-                    self.open_review_result(self.review_list.currentItem())
+            if jump and self.search_hits:
+                self.step_search(1)
             return
         self.review_list.clear()
 
         self.search_summary.setText(tr("Buscando texto…"))
+        self.find_count.setText("…")
 
         def show_matches(results):
-            if results is None or self.review_mode != "search" or self.review_dock.isHidden():
+            if results is None or not self._search_active():
                 return
-            if key != (self.path, self.query.text().strip(), self.search_accents.isChecked(), self.search_advanced.isChecked()):
+            if key != self._current_search_key():
                 return
             self.search_result_key = key
             self.search_hits = sorted((result.page, start, length) for result in results for start, length in result.ranges)
@@ -4738,12 +4902,18 @@ class PDFiu(QMainWindow):
             for result in results:
                 first = result.excerpts[0] if result.excerpts else None
                 self.review_list.addItem(search_result_item(result.page, first, count=result.count))
+            total_hits = len(self.search_hits)
             count = tr("{0} página(s) · {1} coincidencia(s)").format(len(results), sum(result.count for result in results))
             status = count if results else tr("Sin coincidencias. Aplica OCR si el documento está escaneado.")
             self.note(status)
             self.search_summary.setText(status)
+            self.find_count.setText(f"0 / {total_hits}" if total_hits else tr("0 resultados"))
             if results and jump:
-                self.review_list.setCurrentRow(0)
+                if self.search_hits:
+                    self.search_cursor = -1
+                    self.step_search(1)
+                elif self.review_list.count():
+                    self.review_list.setCurrentRow(0)
 
         def search(progress):
             job = QThread.currentThread()
@@ -4759,7 +4929,7 @@ class PDFiu(QMainWindow):
     def step_search(self, direction):
         if self.job is not None:
             return
-        if self.review_mode != "search" or not self.search_hits:
+        if not self._search_active() or not self.search_hits:
             self.open_search()
             return
         size = len(self.search_hits)
@@ -4768,6 +4938,7 @@ class PDFiu(QMainWindow):
             self.search_cursor = (near - (direction < 0)) % size
         else:
             self.search_cursor = (self.search_cursor + direction) % size
+        self.find_count.setText(f"{self.search_cursor + 1} / {size}")
         page, start, length = self.search_hits[self.search_cursor]
         for row in range(self.review_list.count()):
             item = self.review_list.item(row)

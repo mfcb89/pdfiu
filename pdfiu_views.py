@@ -67,12 +67,14 @@ def button(label, handler, *, primary=False, glyph=None):
     if primary:
         widget.setObjectName("primary")
     if glyph:
-        widget.setIcon(icon(glyph, color="#ffffff" if primary else "#3c4963"))
+        widget.setProperty("iconGlyph", (glyph, 16, primary, False))
+        widget.setIcon(icon(glyph, color="#ffffff" if primary else None))
     return widget
 
 
 def icon_button(label, glyph, handler, *, size=32, glyph_size=20):
     control = button("", handler)
+    control.setProperty("iconGlyph", (glyph, glyph_size, False, False))
     control.setIcon(icon(glyph, glyph_size))
     control.setIconSize(QSize(glyph_size, glyph_size))
     control.setProperty("role", "icon")
@@ -94,6 +96,7 @@ def action_menu(label, entries, glyph=None):
     menu.setToolTipsVisible(True)
     control.setMenu(menu)
     if glyph:
+        control.setProperty("iconGlyph", (glyph, 16, False, False))
         control.setIcon(icon(glyph))
     return control
 
