@@ -4,9 +4,15 @@
 
 [Español](README.md) · **English**
 
-An open-source PDF reader and editor created by **mfcb89**. Open, organize, sign, and convert documents from a desktop app. PDFiu processes PDF files on your computer and requires no account. The interface and guided tour are available in Spanish and English.
+An open-source PDF reader and editor created by **mfcb89**, built as a lightweight, 100% local alternative to heavy proprietary PDF readers. Open, organize, edit, sign, measure drawings, and convert documents from a desktop app with no account, no cloud, and no telemetry. The interface and guided tour are available in Spanish and English.
 
 ![PDFiu in English showing the welcome document, thumbnails, and tools](docs/pdfiu-en.png)
+
+## Why PDFiu
+
+- **100% local and private:** your PDFs stay on your computer. PDFiu requires no account and makes no network requests unless you manually check for updates or enable the opt-in startup update check.
+- **Complete desktop toolkit:** includes features commonly locked behind paid subscriptions (merging and organizing pages, editing text, filling forms, English/Spanish OCR, digital signatures, redaction, drawing comparison/measurement, and exporting to Word, Excel, and Markdown).
+- **Sustainable open source:** the full source code is public under the MIT License and can be built and run for free. The paid official Windows installer funds ongoing development, code signing, and updates.
 
 ## What you can do
 
@@ -20,14 +26,20 @@ An open-source PDF reader and editor created by **mfcb89**. Open, organize, sign
 | OCR and export | Recognize English and Spanish on one page or throughout a PDF. Export to Word, Excel, CSV, Markdown with preview, TXT, or PNG. Copy a page as an image. |
 | Print and prepare copies | Preview print output, print at actual size, fit, tile, or make a booklet. Estimate compression and export PDF/A with external tools. |
 
-[User guide](USER_GUIDE.en.md) · [Build guide](packaging/LEEME.en.md)
+[User guide](USER_GUIDE.en.md) · [Build guide](packaging/LEEME.en.md) · [Changelog](CHANGELOG.md)
 
-## Run from source
+## Get PDFiu
 
-The public repository contains the source code. The installer recipe targets Windows x64. Build the macOS package on macOS and validate it on the target architecture.
+### Official installer (Windows x64)
+
+The ready-to-use official installer (no Python setup required) will be distributed through the official download page to fund ongoing development, code signing, and the update channel.
+
+### Run for free from source
+
+The public repository contains the complete source code. The installer recipe targets Windows x64; build the macOS package on macOS and validate it on the target architecture.
 
 1. Open a PowerShell terminal with Git and 64-bit Python 3.12.
-2. Clone the repository and run these commands.
+2. Clone the repository and run these commands:
 
 ```powershell
 git clone https://github.com/mfcb89/pdfiu.git
@@ -37,7 +49,7 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe pdfiu.py
 ```
 
-If you already have a clone open in an editor such as Antigravity, start in the repository folder. For OCR, place `spa.traineddata` and `eng.traineddata` in `runtime/tessdata`. [Set up OCR models](USER_GUIDE.en.md#set-up-ocr-models)
+To enable English and Spanish OCR, place `spa.traineddata` and `eng.traineddata` in `runtime/tessdata`. [Set up OCR models](USER_GUIDE.en.md#set-up-ocr-models)
 
 ## Compatibility
 
@@ -46,8 +58,10 @@ If you already have a clone open in an editor such as Antigravity, start in the 
 - Word export reconstructs the layout approximately. Complex drawings, columns, and scans may need manual adjustment.
 - PDF/A needs Ghostscript, veraPDF, and Java. Redaction rasterizes marked pages and offers OCR to recover visible text. [Usage details](USER_GUIDE.en.md)
 
-## Contribute and license
+## Contribute, security, and license
 
-Open an [issue](https://github.com/mfcb89/pdfiu/issues) or submit a pull request. Spanish and English are welcome. [Contribution guide](CONTRIBUTING.md)
-
-The original PDFiu code and logo are available under the [MIT License](LICENSE). You can use, modify, and redistribute the code, including commercially, if you keep the copyright and license notice. Third-party libraries and assets have their own terms. Review the [third-party notices](THIRD_PARTY_NOTICES.md#english) before redistributing an installer.
+- Open an [issue](https://github.com/mfcb89/pdfiu/issues) or submit a pull request (Spanish and English are welcome). [Contribution guide](CONTRIBUTING.md)
+- To report a security vulnerability privately, see [SECURITY.md](SECURITY.md#english).
+- PDFiu's original source code is available under the [MIT License](LICENSE). You can use, modify, and redistribute the code, including commercially, if you keep the copyright and license notice.
+- The **PDFiu** name and logos in `assets/brand/` are reserved and are not covered by the MIT License. See the [brand policy](TRADEMARKS.md#pdfiu-trademark-and-brand-policy).
+- Third-party libraries and assets have their own terms (including Qt and PySide6 under LGPLv3). Review the [third-party notices](THIRD_PARTY_NOTICES.md#english) before redistributing a binary.

@@ -12,6 +12,7 @@ import base64
 import json
 import os
 import sys
+import time
 
 ROOT = Path(__file__).resolve().parent
 RUNTIME = Path(os.environ.get("PDFIU_RUNTIME", ROOT / "runtime"))
@@ -48,1989 +49,12 @@ from session_recovery import RecoveryJournal, interrupted_sessions, retain_unrec
 from pdf_print import document_sizes, print_pages
 from pdf_print_dialog import PrintDialog
 from pdf_archive import PROFILES, archive_tools, export_archive
-
-
-SEARCH_PAGE_COUNT_ROLE = Qt.ItemDataRole.UserRole + 3
-
-
-def search_result_item(page, match=None, *, count=None):
-    page_label = tr("Página {0}").format(page + 1)
-    if count is not None:
-        page_label = tr("{0} · {1} coincidencia(s)").format(page_label, count)
-    if match is None:
-        context = tr("Página incluida por la condición de exclusión.")
-        item = QListWidgetItem(page_label + "\n" + context)
-        item.setData(Qt.ItemDataRole.UserRole, [page])
-        item.setData(SEARCH_EXCERPT_ROLE, ["", "", context])
-    else:
-        start, length, excerpt = match
-        before, found, after = (" ".join(part.split()) for part in excerpt)
-        if before and (excerpt[0][-1].isspace() or before.endswith("…")):
-            before += " "
-        if after and excerpt[2][0].isspace():
-            after = " " + after
-        context = before + found + after
-        item = QListWidgetItem(page_label + "\n" + context)
-        item.setData(Qt.ItemDataRole.UserRole, [page, start, length])
-        item.setData(SEARCH_EXCERPT_ROLE, [before, found, after])
-    item.setToolTip(context)
-    item.setData(Qt.ItemDataRole.UserRole + 2, page_label)
-    item.setData(SEARCH_PAGE_COUNT_ROLE, count)
-    return item
-
-
-def as_qimage(image):
-    return QImage(image.tobytes(), image.width, image.height, image.width * 3, QImage.Format.Format_RGB888).copy()
-
-
-def file_size_label(count):
-    return f"{count / (1024**2):.2f} MiB" if count >= 1024**2 else f"{count / 1024:.1f} KiB"
-
-
-def button(label, handler, *, primary=False, glyph=None):
-    widget = QPushButton(tr(label))
-    widget.setProperty("sourceLabel", label)
-    widget.setToolTip(tool_hint(label))
-    widget.setToolTipDuration(15000)
-    widget.clicked.connect(lambda: handler())
-    if primary:
-        widget.setObjectName("primary")
-    if glyph:
-        widget.setIcon(icon(glyph, color="#ffffff" if primary else "#3c4963"))
-    return widget
-
-
-def icon_button(label, glyph, handler, *, size=32, glyph_size=20):
-    control = button("", handler)
-    control.setIcon(icon(glyph, glyph_size))
-    control.setIconSize(QSize(glyph_size, glyph_size))
-    control.setProperty("role", "icon")
-    control.setFixedSize(size, size)
-    control.setToolTip(label)
-    control.setAccessibleName(label)
-    return control
-
-
-def action_menu(label, entries, glyph=None):
-    control = QPushButton(tr(label))
-    control.setProperty("sourceLabel", label)
-    control.setToolTip(tool_hint(label))
-    control.setToolTipDuration(15000)
-    menu = QMenu(control)
-    for title, handler in entries:
-        action = menu.addAction(title, handler)
-        action.setToolTip(tool_hint(title))
-    menu.setToolTipsVisible(True)
-    control.setMenu(menu)
-    if glyph:
-        control.setIcon(icon(glyph))
-    return control
-
-
-@dataclass
-class WorkDocument:
-    path: Path
-    name: str
-    dirty: bool = False
-    page: int = 0
-    saved_path: Path | None = None
-    protected_source: Path | None = None
-    redactions: dict = dataclass_field(default_factory=dict)
-    password: str | None = dataclass_field(default=None, repr=False)
-
-
-MEASURE_UNITS = {
-    "m": ("metros", 1), "cm": ("centímetros", 0.01), "mm": ("milímetros", 0.001),
-    "ft": ("pies", 0.3048), "in": ("pulgadas", 0.0254),
-}
-
-
-@dataclass(frozen=True)
-class PageCalibration:
-    meters_per_point: float
-    unit: str
-
-
-class PageView(QGraphicsView):
-    selected = Signal(QRectF)
-    point_selected = Signal(QPointF)
-    zoom_changed = Signal(int)
-    text_error = Signal(str)
-    text_selection_changed = Signal(bool)
-    selection_finished = Signal(QPoint)
-    text_copied = Signal()
-    form_clicked = Signal(QPointF)
-    signature_clicked = Signal(str)
-    shape_drawn = Signal(QPointF, QPointF)
-
-    def __init__(self):
-        super().__init__()
-        self.password = None
-        self.setScene(QGraphicsScene(self))
-        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorViewCenter)
-        self.mode = None
-        self.page_rect = QRectF()
-        self.start = None
-        self.rubber = None
-        self.guides = []
-        self.measure_marks = []
-        self.fit = True
-        self.text_source = None
-        self.text_handles = ExitStack()
-        self.text_page = None
-        self.text_anchor = self.text_end = None
-        self.text_marks = []
-        self.form_items = []
-        self.form_rects = []
-        self.signature_targets = []
-        self.form_press = None
-        self.inline_editor = None
-        self.space_pan = False
-        self.pan_anchor = None
-        self.shape_preview_color = QColor("#3569aa")
-        self.shape_preview_width = 2
-        self.shape_preview_dashed = False
-        self.shape_preview_filled = False
-        self.viewport().setMouseTracking(True)
-        self.copied_text = ""
-        self.image_item = None
-        self.zoom_render = QTimer(self)
-        self.zoom_render.setSingleShot(True)
-        self.zoom_render.setInterval(140)
-        self.zoom_render.timeout.connect(self.refresh_resolution)
-        self.zoom_changed.connect(lambda _: self.zoom_render.start())
-
-    def page(self, image=None, *, text_source=None, preserve_zoom=False):
-        self.finish_inline(commit=False)
-        self.clear_text()
-        self.zoom_render.stop()
-        previous_percent = self.percent()
-        self.text_source = text_source
-        self.start = self.rubber = None
-        self.guides.clear()
-        self.measure_marks.clear()
-        self.form_items.clear()
-        self.form_rects.clear()
-        self.signature_targets.clear()
-        self.form_press = None
-        self.scene().clear()
-        self.image_item = None
-        self.page_rect = QRectF()
-        if image is None:
-            item = self.scene().addText(tr("Abre un PDF para empezar"))
-            item.setDefaultTextColor(QColor("#435d67"))
-            self.scene().setSceneRect(item.boundingRect().adjusted(-20, -20, 20, 20))
-            self.resetTransform()
-            return
-        self.image_item = self.scene().addPixmap(QPixmap.fromImage(as_qimage(image)))
-        shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(19)
-        shadow.setOffset(0, 3)
-        shadow.setColor(QColor(37, 51, 78, 43))
-        self.image_item.setGraphicsEffect(shadow)
-        self.image_item.setTransformationMode(Qt.TransformationMode.SmoothTransformation)
-        self.page_rect = self.image_item.boundingRect()
-        self.rendered_width = image.width
-        self.scene().setSceneRect(self.page_rect.adjusted(-25, -25, 25, 25))
-        if not preserve_zoom:
-            self.fit = True
-        if preserve_zoom and not self.fit and text_source:
-            self.set_percent(previous_percent)
-        else:
-            self.apply_fit()
-
-    def refresh_resolution(self):
-        if not self.text_source or self.image_item is None or self.text_page is not None:
-            return
-        path, index, _ = self.text_source
-        requested = max(128, self.page_rect.width() * self.transform().m11() * self.devicePixelRatioF())
-        limit = 6000 * min(1, self.page_rect.width() / self.page_rect.height())
-        target = round(min(limit, requested))
-        if abs(target - self.rendered_width) <= 2:
-            return
-        try:
-            with pdfium_reader(path, password=self.password) as document:
-                image = render_page(document, index, width=target)
-        except Exception:
-            return
-        self.image_item.setPixmap(QPixmap.fromImage(as_qimage(image)))
-        self.image_item.setTransform(QTransform.fromScale(self.page_rect.width() / image.width, self.page_rect.height() / image.height))
-        self.rendered_width = image.width
-        self.update_raster_interpolation(self.image_item)
-
-    def update_raster_interpolation(self, item):
-        scale = self.transform().m11() * self.devicePixelRatioF()
-        bounds = item.sceneBoundingRect()
-        raster = item.pixmap()
-        near_native = (abs(bounds.width() * scale - raster.width()) <= 2 and
-                       abs(bounds.height() * scale - raster.height()) <= 3)
-        # Avoid averaging adjacent pixels at fractional positions once the raster fits the screen.
-        item.setTransformationMode(Qt.TransformationMode.FastTransformation if near_native else
-                                   Qt.TransformationMode.SmoothTransformation)
-
-    def fit_page(self):
-        self.fit = True
-        self.apply_fit()
-
-    def fit_width(self):
-        self.fit = "width"
-        self.apply_fit()
-
-    def apply_fit(self):
-        if not self.page_rect.isEmpty():
-            if self.fit == "width":
-                width = min(self.viewport().width(), self.maximumViewportSize().width() - 18)
-                self.set_zoom(max(1, width - 6) / self.sceneRect().width())
-            elif self.fit:
-                self.fitInView(self.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
-                self.zoom_changed.emit(self.percent())
-            else:
-                self.zoom_changed.emit(self.percent())
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        if self.fit:
-            self.apply_fit()
-
-    def percent(self):
-        return round(self.transform().m11() * 100 / self.actual_scale())
-
-    def actual_scale(self):
-        if self.text_source:
-            return 96 / 72 * sum(value * value for value in self.text_source[2].right) ** 0.5
-        return 1
-
-    def set_percent(self, percent):
-        self.fit = False
-        self.set_zoom(percent * self.actual_scale() / 100)
-
-    def set_zoom(self, scale):
-        self.scale(scale / self.transform().m11(), scale / self.transform().m11())
-        self.update_zoom_interpolation()
-        self.zoom_changed.emit(self.percent())
-
-    def update_zoom_interpolation(self):
-        if self.image_item is not None:
-            self.update_raster_interpolation(self.image_item)
-
-    def zoom(self, factor, *, at_mouse=False):
-        if self.page_rect.isEmpty():
-            return
-        target = self.transform().m11() * factor
-        scale = min(8 * self.actual_scale(), max(0.10 * self.actual_scale(), target))
-        self.fit = False
-        if at_mouse:
-            self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
-        self.set_zoom(scale)
-        self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorViewCenter)
-
-    def wheelEvent(self, event):
-        if event.modifiers() & Qt.KeyboardModifier.ControlModifier and event.angleDelta().y():
-            self.zoom(1.2 ** (event.angleDelta().y() / 120), at_mouse=True)
-            event.accept()
-        else:
-            super().wheelEvent(event)
-
-    def clear_text(self):
-        self.text_handles.close()
-        self.text_page = None
-        self.text_anchor = self.text_end = None
-        self.set_copied_text("")
-        self.clear_text_marks()
-
-    def set_copied_text(self, value):
-        self.copied_text = value
-        self.text_selection_changed.emit(bool(value.strip()))
-
-    def clear_text_marks(self):
-        for mark in self.text_marks:
-            self.scene().removeItem(mark)
-        self.text_marks.clear()
-
-    def begin_text(self, point):
-        self.clear_text()
-        try:
-            path, index, coordinates = self.text_source
-            self.text_page = self.text_handles.enter_context(page_text(path, index, password=self.password))
-            if not self.text_page.count_chars():
-                self.text_error.emit(tr("Esta página no tiene texto seleccionable. Aplica OCR si es un escaneo."))
-                self.clear_text()
-                return
-            self.text_page.count_rects()
-            self.text_anchor = self.text_page.get_index(*coordinates.at(point.x(), point.y()), 12, 8)
-            if self.text_anchor is None:
-                self.clear_text()
-        except Exception as error:
-            self.clear_text()
-            self.text_error.emit(str(error))
-
-    def extend_text(self, point):
-        coordinates = self.text_source[2]
-        x, y = coordinates.at(point.x(), point.y())
-        end = self.text_page.get_index(x, y, 8, 12)
-        if end is None:
-            end = self.text_page.get_index(x, y, 144, 12)
-        if end is None or end == self.text_end:
-            return
-        self.text_end = end
-        start, stop = sorted((self.text_anchor, end))
-        self.mark_text_range(self.text_page, coordinates, start, stop - start + 1)
-
-    def mark_text_range(self, content, coordinates, start, count):
-        self.clear_text_marks()
-        for rect in self.text_range_rects(content, coordinates, start, count):
-            self.text_marks.append(self.scene().addRect(rect, QPen(Qt.PenStyle.NoPen), QColor(50, 113, 211, 88)))
-
-    @staticmethod
-    def text_range_rects(content, coordinates, start, count):
-        boxes = []
-        for index in range(content.count_rects(start, count)):
-            x1, y1, x2, y2 = content.get_rect(index)
-            boxes.append(QRectF(QPointF(x1, y1), QPointF(x2, y2)).normalized())
-        for box in text_line_boxes(boxes):
-            rect = QRectF(QPointF(*coordinates.device(box.left(), box.top())),
-                          QPointF(*coordinates.device(box.right(), box.bottom())))
-            yield rect.normalized()
-
-    def show_text_match(self, start, count):
-        if not self.text_source:
-            return
-        self.clear_text()
-        path, index, coordinates = self.text_source
-        with page_text(path, index, password=self.password) as content:
-            content.count_rects()
-            self.mark_text_range(content, coordinates, start, count)
-            self.set_copied_text(content.get_text_range(start, count))
-        if self.text_marks:
-            self.ensureVisible(self.text_marks[0], 32, 32)
-
-    def finish_text(self, point):
-        try:
-            self.extend_text(point)
-            if self.text_end is not None:
-                start, stop = sorted((self.text_anchor, self.text_end))
-                self.set_copied_text(self.text_page.get_text_range(start, stop - start + 1))
-                if self.copied_text.strip():
-                    self.selection_finished.emit(self.mapFromScene(point))
-        except Exception as error:
-            self.clear_text()
-            self.text_error.emit(str(error))
-        finally:
-            self.text_handles.close()
-            self.text_page = None
-
-    def copy_text(self):
-        if self.copied_text.strip():
-            QApplication.clipboard().setText(self.copied_text)
-            self.text_copied.emit()
-            return True
-        return False
-
-    def keyPressEvent(self, event):
-        if self.inline_editor is None and event.matches(QKeySequence.StandardKey.Copy):
-            if not self.copy_text():
-                self.text_error.emit(tr("Selecciona el texto arrastrando sobre la página y vuelve a pulsar Ctrl+C."))
-            event.accept()
-            return
-        super().keyPressEvent(event)
-
-    def contextMenuEvent(self, event):
-        if self.copied_text.strip():
-            menu = QMenu(self)
-            menu.addAction(tr("Copiar texto"), self.copy_text)
-            menu.exec(event.globalPos())
-        else:
-            super().contextMenuEvent(event)
-
-    def set_mode(self, mode):
-        self.clear_text()
-        self.mode = mode
-        if self.rubber is not None:
-            self.scene().removeItem(self.rubber)
-            self.rubber = None
-        self.start = None
-        self.form_press = None
-        self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag if mode == "pan" else QGraphicsView.DragMode.NoDrag)
-        self.update_mode_cursor()
-
-    def update_mode_cursor(self):
-        self.setCursor(Qt.CursorShape.OpenHandCursor if self.space_pan or self.mode == "pan" else
-                       Qt.CursorShape.CrossCursor if self.mode else
-                       Qt.CursorShape.IBeamCursor if self.text_source else Qt.CursorShape.ArrowCursor)
-
-    def start_space_pan(self):
-        if self.page_rect.isEmpty() or any(value is not None for value in
-                                           (self.inline_editor, self.start, self.text_page, self.form_press)):
-            return False
-        self.space_pan = True
-        self.update_mode_cursor()
-        return True
-
-    def stop_space_pan(self):
-        if self.space_pan:
-            self.space_pan = False
-            self.pan_anchor = None
-            self.update_mode_cursor()
-
-    def edit_inline(self, field, coordinates, on_save):
-        self.finish_inline()
-        x1, y1, x2, y2 = field.box
-        rect = QRectF(QPointF(*coordinates.device(x1, y1)),
-                      QPointF(*coordinates.device(x2, y2))).normalized()
-        multiline = field.kind == "/Tx" and bool(field.flags & (1 << 12))
-        if multiline:
-            editor = QPlainTextEdit(str(field.value))
-            value = editor.toPlainText
-        elif field.kind == "/Tx":
-            editor = QLineEdit(str(field.value))
-            value = editor.text
-        else:
-            editor = QComboBox()
-            editor.setEditable(bool(field.flags & (1 << 18)))
-            for label, export in field.options:
-                editor.addItem(label, export)
-            selected = editor.findData(str(field.value))
-            editor.setCurrentIndex(selected)
-            if selected < 0 and editor.isEditable():
-                editor.setEditText(str(field.value))
-
-            def value():
-                if editor.isEditable() and editor.currentText() != editor.itemText(editor.currentIndex()):
-                    return editor.currentText()
-                return editor.currentData()
-
-        self.mount_editor(editor, rect, field.name, str(field.value), value, on_save, multiline=multiline)
-
-    def edit_existing_text(self, block, coordinates, on_save):
-        self.finish_inline()
-        left, bottom, right, top = block.box
-        rect = QRectF(QPointF(*coordinates.device(left, bottom)),
-                      QPointF(*coordinates.device(right, top))).normalized()
-        rect = rect.adjusted(-3, -5, 5, 5)
-        rect.setWidth(max(rect.width(), 160))
-        editor = QLineEdit(block.value)
-        self.mount_editor(editor, rect, tr("Texto existente"), block.value, editor.text, on_save)
-        editor.selectAll()
-
-    def mount_editor(self, editor, rect, label, initial, value, on_save, *, multiline=False):
-        font_size = max(12, min(30, round(rect.height() * (0.20 if multiline else 0.63))))
-        editor.setStyleSheet(f"background:#fff; color:#162737; border:1px solid #2874cc; padding:0 3px; font-size:{font_size}px;")
-        editor.setAccessibleName(label)
-        proxy = self.scene().addWidget(editor)
-        proxy.setGeometry(rect.adjusted(0, 0, max(0, 32 - rect.width()), max(0, 17 - rect.height())))
-        proxy.setZValue(10)
-        self.inline_editor = (proxy, editor, value, initial, on_save)
-        editor.installEventFilter(self)
-        if isinstance(editor, QLineEdit):
-            editor.editingFinished.connect(self.finish_inline)
-        elif isinstance(editor, QComboBox):
-            editor.activated.connect(lambda _: self.finish_inline())
-            if editor.isEditable():
-                editor.lineEdit().installEventFilter(self)
-                editor.lineEdit().returnPressed.connect(self.finish_inline)
-        self.ensureVisible(proxy, 16, 16)
-        editor.setFocus()
-        if isinstance(editor, QComboBox):
-            editor.showPopup()
-
-    def finish_inline(self, *, commit=True):
-        if self.inline_editor is None:
-            return
-        proxy, editor, get_value, initial, on_save = self.inline_editor
-        self.inline_editor = None
-        value = get_value()
-        proxy.setWidget(None)
-        self.scene().removeItem(proxy)
-        editor.deleteLater()
-        proxy.deleteLater()
-        if commit and value is not None and value != initial:
-            on_save(value)
-
-    def eventFilter(self, watched, event):
-        editing = self.inline_editor
-        if editing and (watched is editing[1] or watched.parent() is editing[1]):
-            if event.type() in (QEvent.Type.ShortcutOverride, QEvent.Type.KeyPress):
-                cancel = event.key() == Qt.Key.Key_Escape
-                accept = (event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
-                          and event.modifiers() & Qt.KeyboardModifier.ControlModifier)
-                if event.type() == QEvent.Type.ShortcutOverride and (cancel or accept):
-                    event.accept()
-                    return True
-                if cancel:
-                    self.finish_inline(commit=False)
-                    return True
-                if accept:
-                    self.finish_inline()
-                    return True
-            if event.type() == QEvent.Type.FocusOut and isinstance(editing[1], QPlainTextEdit):
-                self.finish_inline()
-        return super().eventFilter(watched, event)
-
-    def show_fields(self, coordinates, fields, *, tint):
-        for item in self.form_items:
-            self.scene().removeItem(item)
-        self.form_items.clear()
-        self.form_rects.clear()
-        for field in fields:
-            x1, y1, x2, y2 = field.box
-            rect = QRectF(QPointF(*coordinates.device(x1, y1)),
-                          QPointF(*coordinates.device(x2, y2))).normalized()
-            self.form_rects.append(rect)
-            if tint:
-                pen = QPen(QColor(36, 89, 173, 135), 1)
-                pen.setCosmetic(True)
-                self.form_items.append(self.scene().addRect(rect, pen, QColor(112, 164, 247, 59)))
-
-    def mark_boxes(self, coordinates=None, occupied=(), chosen=None):
-        for item in self.guides:
-            self.scene().removeItem(item)
-        self.guides.clear()
-        boxes = [(box, "#ac591d", QColor(183, 106, 39, 30)) for box in occupied]
-        if chosen:
-            boxes.append((chosen, "#146c5d", QColor(34, 135, 115, 42)))
-        for (x1, y1, x2, y2), color, fill in boxes:
-            corner1 = QPointF(*coordinates.device(x1, y1))
-            corner2 = QPointF(*coordinates.device(x2, y2))
-            pen = QPen(QColor(color), 2, Qt.PenStyle.DashLine)
-            pen.setCosmetic(True)
-            self.guides.append(self.scene().addRect(QRectF(corner1, corner2).normalized(), pen, fill))
-
-    def page_point(self, event):
-        point = self.mapToScene(event.position().toPoint())
-        return QPointF(
-            min(self.page_rect.right(), max(self.page_rect.left(), point.x())),
-            min(self.page_rect.bottom(), max(self.page_rect.top(), point.y())),
-        )
-
-    def mousePressEvent(self, event):
-        if self.space_pan and event.button() == Qt.MouseButton.LeftButton:
-            self.setFocus(Qt.FocusReason.MouseFocusReason)
-            self.pan_anchor = event.position().toPoint()
-            self.setCursor(Qt.CursorShape.ClosedHandCursor)
-            event.accept()
-            return
-        if self.mode == "pan":
-            super().mousePressEvent(event)
-            return
-        if self.inline_editor:
-            proxy = self.inline_editor[0]
-            if proxy.sceneBoundingRect().contains(self.mapToScene(event.position().toPoint())):
-                super().mousePressEvent(event)
-                return
-            self.finish_inline()
-        if not self.mode and self.text_source and event.button() == Qt.MouseButton.LeftButton:
-            if self.page_rect.contains(self.mapToScene(event.position().toPoint())):
-                point = self.page_point(event)
-                signature = next((name for rect, name in self.signature_targets if rect.contains(point)), None)
-                if signature is not None or any(rect.contains(point) for rect in self.form_rects):
-                    self.clear_text()
-                    self.form_press = (point, event.position(), signature)
-                else:
-                    self.setFocus(Qt.FocusReason.MouseFocusReason)
-                    self.begin_text(point)
-            else:
-                self.clear_text()
-            event.accept()
-            return
-        if self.mode and event.button() == Qt.MouseButton.LeftButton and self.page_rect.contains(self.mapToScene(event.position().toPoint())):
-            self.start = self.page_point(event)
-            event.accept()
-            return
-        super().mousePressEvent(event)
-
-    def mouseMoveEvent(self, event):
-        if self.space_pan:
-            if self.pan_anchor is not None:
-                position = event.position().toPoint()
-                delta = self.pan_anchor - position
-                self.pan_anchor = position
-                horizontal, vertical = self.horizontalScrollBar(), self.verticalScrollBar()
-                horizontal.setValue(horizontal.value() + delta.x())
-                vertical.setValue(vertical.value() + delta.y())
-            event.accept()
-            return
-        if self.form_press is not None:
-            point, device_point, _ = self.form_press
-            if (event.position() - device_point).manhattanLength() < QApplication.startDragDistance():
-                return
-            self.form_press = None
-            self.begin_text(point)
-        if self.text_page is not None:
-            try:
-                self.extend_text(self.page_point(event))
-            except Exception as error:
-                self.clear_text()
-                self.text_error.emit(str(error))
-            return
-        if (self.mode or "").startswith("shape-") and self.start is not None:
-            point = self.page_point(event)
-            rect = QRectF(self.start, point).normalized()
-            if self.rubber is None:
-                pen = QPen(self.shape_preview_color, self.shape_preview_width)
-                if self.shape_preview_dashed:
-                    pen.setStyle(Qt.PenStyle.DashLine)
-                pen.setCosmetic(True)
-                fill = QColor(self.shape_preview_color)
-                fill.setAlpha(round(fill.alpha() * 0.24) if self.shape_preview_filled else 0)
-                if self.mode == "shape-ellipse":
-                    self.rubber = self.scene().addEllipse(rect, pen, fill)
-                elif self.mode in ("shape-line", "shape-arrow"):
-                    self.rubber = self.scene().addLine(self.start.x(), self.start.y(), point.x(), point.y(), pen)
-                else:
-                    self.rubber = self.scene().addRect(rect, pen, fill)
-            elif self.mode in ("shape-line", "shape-arrow"):
-                self.rubber.setLine(self.start.x(), self.start.y(), point.x(), point.y())
-            else:
-                self.rubber.setRect(rect)
-            return
-        if self.mode in ("signature", "redact") and self.start is not None:
-            rect = QRectF(self.start, self.page_point(event)).normalized()
-            if self.rubber is None:
-                pen = QPen(QColor("#146c5d"), 2, Qt.PenStyle.DashLine)
-                pen.setCosmetic(True)
-                self.rubber = self.scene().addRect(rect, pen, QColor(34, 135, 115, 42))
-            else:
-                self.rubber.setRect(rect)
-            return
-        if not self.mode and self.text_source:
-            point = self.mapToScene(event.position().toPoint())
-            if (any(rect.contains(point) for rect, _ in self.signature_targets) or
-                    any(rect.contains(point) for rect in self.form_rects)):
-                cursor = Qt.CursorShape.PointingHandCursor
-            elif self.page_rect.contains(point):
-                cursor = Qt.CursorShape.IBeamCursor
-            else:
-                cursor = Qt.CursorShape.ArrowCursor
-            self.setCursor(cursor)
-        super().mouseMoveEvent(event)
-
-    def mouseReleaseEvent(self, event):
-        if self.space_pan and event.button() == Qt.MouseButton.LeftButton:
-            self.pan_anchor = None
-            self.update_mode_cursor()
-            event.accept()
-            return
-        if self.inline_editor and self.inline_editor[0].sceneBoundingRect().contains(
-            self.mapToScene(event.position().toPoint())
-        ):
-            super().mouseReleaseEvent(event)
-            return
-        if self.form_press is not None and event.button() == Qt.MouseButton.LeftButton:
-            point, _, signature = self.form_press
-            self.form_press = None
-            event.accept()
-            if signature is None:
-                self.form_clicked.emit(point)
-            else:
-                self.signature_clicked.emit(signature)
-            return
-        if self.text_page is not None and event.button() == Qt.MouseButton.LeftButton:
-            self.finish_text(self.page_point(event))
-            event.accept()
-            return
-        if self.mode and self.start is not None and event.button() == Qt.MouseButton.LeftButton:
-            point = self.page_point(event)
-            rect = QRectF(self.start, point).normalized()
-            if self.mode in ("signature", "redact"):
-                self.start = None
-                self.selected.emit(rect)
-            elif self.mode.startswith("shape-"):
-                start, self.start = self.start, None
-                self.shape_drawn.emit(start, point)
-            else:
-                self.start = None
-                self.point_selected.emit(point)
-            event.accept()
-            return
-        super().mouseReleaseEvent(event)
-
-
-class ContinuousPageView(PageView):
-    active_page_changed = Signal(int, object)
-
-    def __init__(self):
-        super().__init__()
-        self.source = None
-        self.frames = []
-        self.tops = []
-        self.bottoms = []
-        self.rendered = {}
-        self.tiles = {}
-        self.search_ranges = {}
-        self.search_items = {}
-        self.active_index = None
-        self.positioning = False
-        for scrollbar in (self.verticalScrollBar(), self.horizontalScrollBar()):
-            scrollbar.valueChanged.connect(self.schedule_pages)
-        self.scroll_render = QTimer(self)
-        self.scroll_render.setSingleShot(True)
-        self.scroll_render.setInterval(35)
-        self.scroll_render.timeout.connect(self.render_visible)
-
-    def schedule_pages(self):
-        if self.source and not self.positioning:
-            self.scroll_render.start()
-
-    def reset_document(self):
-        self.set_search_ranges({})
-        self.stop_space_pan()
-        self.source = None
-        self.password = None
-        self.scroll_render.stop()
-        self.zoom_render.stop()
-        self.set_mode(None)
-        self.frames.clear()
-        self.tops.clear()
-        self.bottoms.clear()
-        self.rendered.clear()
-        self.tiles.clear()
-        self.active_index = None
-        self.page()
-
-    def set_document(self, path, sizes, index, *, keep_position=False, initial_fit=None, password=None):
-        self.set_search_ranges({})
-        self.stop_space_pan()
-        location = None
-        if keep_position and not self.page_rect.isEmpty():
-            center = self.mapToScene(self.viewport().rect().center())
-            location = ((center.x() - self.page_rect.left()) / self.page_rect.width(),
-                        (center.y() - self.page_rect.top()) / self.page_rect.height())
-        percent = self.percent()
-        if initial_fit is not None:
-            self.fit = initial_fit
-        self.positioning = True
-        try:
-            self.finish_inline(commit=False)
-            self.clear_text()
-            self.set_mode(None)
-            self.zoom_render.stop()
-            self.scroll_render.stop()
-            self.guides.clear()
-            self.measure_marks.clear()
-            self.form_items.clear()
-            self.form_rects.clear()
-            self.scene().clear()
-            self.rendered.clear()
-            self.tiles.clear()
-            self.source = path
-            self.password = password
-            self.frames = []
-            width = max(w for w, _ in sizes) * 96 / 72
-            top = 18.0
-            for page_width, page_height in sizes:
-                w, h = page_width * 96 / 72, page_height * 96 / 72
-                self.frames.append(QRectF((width-w)/2, top, w, h))
-                top += h + 20
-            self.tops = [rect.top() for rect in self.frames]
-            self.bottoms = [rect.bottom() for rect in self.frames]
-            self.scene().setSceneRect(QRectF(-22, 0, width+44, top))
-            self.active_index = None
-            self.activate(index)
-            if self.fit:
-                self.apply_fit()
-            else:
-                self.set_percent(percent)
-            if location:
-                frame = self.frames[index]
-                self.centerOn(frame.left()+location[0]*frame.width(), frame.top()+location[1]*frame.height())
-            else:
-                self.center_page(index)
-        finally:
-            self.positioning = False
-        self.schedule_pages()
-
-    def actual_scale(self):
-        return 1
-
-    def zoom(self, factor, *, at_mouse=False):
-        super().zoom(factor, at_mouse=at_mouse)
-        self.schedule_pages()
-
-    def apply_fit(self):
-        if self.page_rect.isEmpty():
-            return
-        if not self.fit:
-            self.zoom_changed.emit(self.percent())
-            return
-        already_positioning = self.positioning
-        self.positioning = True
-        try:
-            width = self.viewport().width() - 30
-            height = self.viewport().height() - 28
-            scale = width / (self.page_rect.width() + 18)
-            if self.fit != "width":
-                scale = min(scale, height / (self.page_rect.height() + 16))
-            self.set_zoom(max(0.02, scale))
-            self.center_page(self.active_index)
-        finally:
-            self.positioning = already_positioning
-        self.schedule_pages()
-
-    def center_page(self, index):
-        rect = self.frames[index]
-        visible = self.viewport().height() / self.transform().m11()
-        self.centerOn(rect.center().x(), min(rect.center().y(), rect.top() - 9 + visible/2))
-
-    def jump(self, index):
-        self.positioning = True
-        try:
-            self.activate(index)
-            if self.fit:
-                self.apply_fit()
-            else:
-                self.center_page(index)
-        finally:
-            self.positioning = False
-        self.schedule_pages()
-
-    def render_items(self, indices, *, visible=None):
-        desired = {}
-        for index in indices:
-            rect = self.frames[index]
-            value = round(max(128, rect.width() * self.transform().m11() * self.devicePixelRatioF()))
-            offscreen = visible is not None and index not in visible
-            if offscreen:
-                value = min(value, 480)
-            limit = int(6000 * min(1, rect.width()/rect.height()))
-            size = max(1, limit // 3) if value > limit else value
-            previous = self.rendered.get(index)
-            # Match the visible physical pixel width. PDFium can round by one pixel.
-            tolerance = max(2, round(size * 0.15)) if offscreen else 2
-            if previous is None or abs(size - previous[2]) > tolerance:
-                desired[index] = size
-        if not desired:
-            return
-        with pdfium_reader(self.source, password=self.password) as document:
-            for index, size in desired.items():
-                rect = self.frames[index]
-                image, mapping = render_page(document, index, width=size, with_coordinates=True)
-                sx, sy = rect.width()/image.width, rect.height()/image.height
-                r = tuple(axis/sx for axis in mapping.right)
-                d = tuple(axis/sy for axis in mapping.down)
-                origin = tuple(value - rect.left()*rx - rect.top()*dy for value, rx, dy in zip(mapping.origin, r, d))
-                coords = Coordinates(origin, r, d)
-                if index in self.rendered:
-                    item = self.rendered[index][0]
-                    item.setPixmap(QPixmap.fromImage(as_qimage(image)))
-                else:
-                    item = self.scene().addPixmap(QPixmap.fromImage(as_qimage(image)))
-                    item.setTransformationMode(Qt.TransformationMode.SmoothTransformation)
-                    item.setZValue(-2)
-                    item.setPos(rect.topLeft())
-                item.setTransform(QTransform.fromScale(sx, sy))
-                self.update_raster_interpolation(item)
-                self.rendered[index] = (item, coords, image.width)
-
-    def update_zoom_interpolation(self):
-        for item, _, _ in self.rendered.values():
-            self.update_raster_interpolation(item)
-
-    def render_visible_tiles(self, visible, shown):
-        scale = self.transform().m11() * self.devicePixelRatioF()
-        tile_size = 768
-        required = {}
-        for index in shown:
-            frame = self.frames[index]
-            width, height = ceil(frame.width() * scale), ceil(frame.height() * scale)
-            if max(width, height) <= 6000:
-                continue
-            region = visible.intersected(frame)
-            if region.isEmpty():
-                continue
-            x1 = max(0, floor((region.left() - frame.left()) * scale))
-            y1 = max(0, floor((region.top() - frame.top()) * scale))
-            x2 = min(width, ceil((region.right() - frame.left()) * scale))
-            y2 = min(height, ceil((region.bottom() - frame.top()) * scale))
-            for top in range(y1 // tile_size * tile_size, y2, tile_size):
-                for left in range(x1 // tile_size * tile_size, x2, tile_size):
-                    rect = (left, top, min(width, left + tile_size), min(height, top + tile_size))
-                    required[(index, scale, left, top)] = rect
-        for key in self.tiles.keys() - required.keys():
-            self.scene().removeItem(self.tiles.pop(key))
-        pending = required.keys() - self.tiles.keys()
-        if not pending:
-            return
-        with pdfium_reader(self.source, password=self.password) as document:
-            for key in sorted(pending):
-                index, _, left, top = key
-                image = render_page_tile(document, index, scale * 96 / 72, required[key])
-                item = self.scene().addPixmap(QPixmap.fromImage(as_qimage(image)))
-                frame = self.frames[index]
-                item.setPos(frame.left() + left / scale, frame.top() + top / scale)
-                item.setScale(1 / scale)
-                item.setZValue(-1.5)
-                self.tiles[key] = item
-
-    def activate(self, index):
-        if index == self.active_index:
-            return
-        self.render_items((index,))
-        self.clear_text()
-        self.active_index = index
-        self.page_rect = self.frames[index]
-        self.image_item, coords, self.rendered_width = self.rendered[index]
-        self.text_source = self.source, index, coords
-        self.active_page_changed.emit(index, coords)
-
-    def render_visible(self):
-        if not self.source or self.positioning or not self.isEnabled():
-            return
-        visible = self.mapToScene(self.viewport().rect()).boundingRect()
-        first = bisect_right(self.bottoms, visible.top())
-        last = bisect_left(self.tops, visible.bottom())
-        index = min(len(self.frames)-1, bisect_right(self.bottoms, visible.center().y()))
-        shown = set(range(first, last)) | {index}
-        keep = set(range(max(0, first - 1), min(len(self.frames), last + 1)))
-        keep.add(index)
-        if self.active_index is not None:
-            keep.add(self.active_index)
-        try:
-            for stale in self.rendered.keys() - keep:
-                self.scene().removeItem(self.rendered.pop(stale)[0])
-            self.render_items(sorted(keep, key=lambda page: (page not in shown, abs(page - index))), visible=shown)
-            self.render_visible_tiles(visible, shown)
-            self.refresh_search_marks(shown)
-            selection_visible = any(visible.intersects(mark.rect()) for mark in self.text_marks)
-            if not (self.start is not None or self.text_page or self.form_press or self.inline_editor or selection_visible):
-                self.activate(index)
-        except Exception as error:
-            self.text_error.emit(str(error))
-
-    def refresh_resolution(self):
-        self.render_visible()
-
-    def set_search_ranges(self, ranges):
-        for items in self.search_items.values():
-            for item in items:
-                self.scene().removeItem(item)
-        self.search_items.clear()
-        self.search_ranges = ranges
-        if ranges:
-            self.schedule_pages()
-
-    def refresh_search_marks(self, visible):
-        for page in self.search_items.keys() - visible:
-            for item in self.search_items.pop(page):
-                self.scene().removeItem(item)
-        pending = visible & self.search_ranges.keys() - self.search_items.keys()
-        if not pending:
-            return
-        with pdfium_reader(self.source, password=self.password) as document:
-            for page in sorted(pending):
-                coordinates = self.rendered[page][1]
-                strokes = QPainterPath()
-                strokes.setFillRule(Qt.FillRule.WindingFill)
-                with document_text(document, page) as content:
-                    for start, count in self.search_ranges[page]:
-                        for rect in self.text_range_rects(content, coordinates, start, count):
-                            strokes.addRect(rect)
-                item = self.scene().addPath(strokes, QPen(Qt.PenStyle.NoPen), QColor(244, 171, 35, 125))
-                item.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
-                item.setZValue(-1)
-                self.search_items[page] = [item]
-
-    def mousePressEvent(self, event):
-        if self.source and event.button() == Qt.MouseButton.LeftButton and not self.space_pan and self.mode != "pan":
-            point = self.mapToScene(event.position().toPoint())
-            in_editor = self.inline_editor and self.inline_editor[0].sceneBoundingRect().contains(point)
-            if not in_editor:
-                self.finish_inline()
-                point = self.mapToScene(event.position().toPoint())
-                index = bisect_right(self.bottoms, point.y())
-                if index < len(self.frames) and self.frames[index].contains(point):
-                    try:
-                        self.activate(index)
-                    except Exception as error:
-                        self.text_error.emit(str(error))
-                        return
-        super().mousePressEvent(event)
-
-
-class CompressionPreview(QDialog):
-    def __init__(self, parent, original, compressed, page=0):
-        super().__init__(parent)
-        self.setWindowTitle(tr("Comparar antes de guardar"))
-        available = parent.screen().availableGeometry()
-        self.resize(min(1200, available.width() - 35), min(760, available.height() - 60))
-        self.setMinimumSize(760, 430)
-        self.paths = (original, compressed)
-        self.views = (PageView(), PageView())
-        self.syncing = False
-        self.percent = 100
-        layout = QVBoxLayout(self)
-        controls = QHBoxLayout()
-        controls.addWidget(QLabel(tr("Página")))
-        self.page_number = QSpinBox()
-        counts = [len(reader_for(path).pages) for path in self.paths]
-        self.page_number.setRange(1, min(counts))
-        self.page_number.setValue(page + 1)
-        controls.addWidget(self.page_number)
-        controls.addWidget(button("Ajustar", lambda: self.zoom_to(None)))
-        controls.addWidget(button("100 %", lambda: self.zoom_to(100)))
-        controls.addWidget(button("200 %", lambda: self.zoom_to(200)))
-        self.zoom_label = QLabel("100 %", objectName="muted")
-        controls.addWidget(self.zoom_label)
-        controls.addStretch(1)
-        controls.addWidget(button("Volver al resultado", self.accept))
-        layout.addLayout(controls)
-        side = QWidget()
-        columns = QHBoxLayout(side)
-        columns.setContentsMargins(0, 0, 0, 0)
-        labels = [tr("Original"), tr("Copia comprimida")]
-        for index, (label, view) in enumerate(zip(labels, self.views)):
-            pane = QVBoxLayout()
-            pane.addWidget(QLabel(label, objectName="chapter"))
-            pane.addWidget(view, 1)
-            columns.addLayout(pane, 1)
-            view.set_mode("pan")
-            view.horizontalScrollBar().valueChanged.connect(lambda _, key=index: self.sync_position(key))
-            view.verticalScrollBar().valueChanged.connect(lambda _, key=index: self.sync_position(key))
-            view.zoom_changed.connect(lambda _, key=index: self.sync_zoom(key))
-        layout.addWidget(side, 1)
-        self.page_note = "" if counts[0] == counts[1] else tr(" Se muestran las primeras {0} páginas comunes ({1} y {2} en total).").format(min(counts), counts[0], counts[1])
-        self.hint = QLabel(tr("Arrastra cualquiera de las vistas. Ctrl + rueda cambia el zoom en ambas."), objectName="muted")
-        self.hint.setWordWrap(True)
-        layout.addWidget(self.hint)
-        self.page_number.valueChanged.connect(self.load_page)
-        self.load_page()
-
-    def load_page(self):
-        index = self.page_number.value() - 1
-        try:
-            rendered = []
-            for path, view in zip(self.paths, self.views):
-                with pdfium_reader(path) as pdf:
-                    rendered.append(render_page(pdf, index, dpi=96 * view.devicePixelRatioF(), with_coordinates=True))
-        except Exception as error:
-            self.hint.setText(tr("No se pudo mostrar la página {0}: {1}").format(index + 1, error))
-            return
-        self.syncing = True
-        try:
-            for view, path, (image, coords) in zip(self.views, self.paths, rendered):
-                view.page(image, text_source=(path, index, coords))
-                view.set_mode("pan")
-        finally:
-            self.syncing = False
-        self.zoom_to(self.percent, reset_position=True)
-        self.hint.setText(tr("Arrastra cualquiera de las vistas. Ctrl + rueda cambia el zoom en ambas.") + self.page_note)
-
-    def zoom_to(self, percent, *, reset_position=False):
-        self.syncing = True
-        self.percent = percent
-        try:
-            for view in self.views:
-                if percent is None:
-                    view.fit_page()
-                else:
-                    view.set_percent(percent)
-                if reset_position:
-                    for scrollbar in (view.horizontalScrollBar(), view.verticalScrollBar()):
-                        scrollbar.setValue(scrollbar.minimum())
-        finally:
-            self.syncing = False
-        self.zoom_label.setText(f"{percent} %" if percent is not None else tr("Ajustado"))
-        self.sync_position(0)
-
-    def sync_zoom(self, index):
-        if self.syncing or self.views[index].fit:
-            return
-        self.syncing = True
-        try:
-            source, target = self.views[index], self.views[1 - index]
-            ratio = source.transform().m11() / source.actual_scale()
-            self.percent = source.percent()
-            target.fit = False
-            target.set_zoom(ratio * target.actual_scale())
-            self.zoom_label.setText(f"{self.percent} %")
-        finally:
-            self.syncing = False
-        self.sync_position(index)
-
-    def sync_position(self, index):
-        source, target = self.views[index], self.views[1 - index]
-        if self.syncing or source.page_rect.isEmpty() or target.page_rect.isEmpty():
-            return
-        self.syncing = True
-        try:
-            center = source.mapToScene(source.viewport().rect().center())
-            u, v = center.x() / source.page_rect.width(), center.y() / source.page_rect.height()
-            target.centerOn(u * target.page_rect.width(), v * target.page_rect.height())
-        finally:
-            self.syncing = False
-
-
-class BookmarkRows(QStyledItemDelegate):
-    def sizeHint(self, option, index):
-        size = super().sizeHint(option, index)
-        tree = self.parent()
-        level, parent = 1, index.parent()
-        while parent.isValid():
-            level += 1
-            parent = parent.parent()
-        width = max(40, tree.viewport().width() - level * tree.indentation() - 12)
-        text = str(index.data() or "")
-        bounds = option.fontMetrics.boundingRect(0, 0, width, 10000, Qt.TextFlag.TextWordWrap, text)
-        size.setHeight(max(size.height() + 5, bounds.height() + 5))
-        return size
-
-
-class RevisionComparison(QDialog):
-    def __init__(self, parent, inputs):
-        super().__init__(parent)
-        self.setWindowTitle(tr("Comparar planos"))
-        self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.WindowMinMaxButtonsHint | Qt.WindowType.WindowCloseButtonHint)
-        self.setSizeGripEnabled(True)
-        self.setWindowState(Qt.WindowState.WindowMaximized)
-        available = parent.screen().availableGeometry()
-        self.resize(min(1200, available.width() - 35), min(780, available.height() - 60))
-        self.setMinimumSize(740, 440)
-        self.inputs = inputs
-        self.locked = False
-        self.images = None
-        self.zoom_percent = None
-        self.page_pair = None
-        self.views = (PageView(), PageView())
-        self.overlay = PageView()
-        self.page_inputs = []
-
-        layout = QVBoxLayout(self)
-        top = QHBoxLayout()
-        for label, (path, password) in zip(("Original", "Revisión"), inputs):
-            try:
-                reader = reader_for(path, allow_empty_password=True, password=password)
-                units = [float(page.get("/UserUnit", 1)) for page in reader.pages]
-            except Exception as error:
-                raise ValueError(f"{path.name}: {error}") from error
-            field = QSpinBox()
-            field.setRange(1, len(units))
-            field.setKeyboardTracking(False)
-            field.setAccessibleName(tr("{0} · página").format(tr(label)))
-            field.valueChanged.connect(self.request_render)
-            self.page_inputs.append((field, units))
-            name = QLabel(f"{tr(label)} · {path.name}")
-            name.setTextFormat(Qt.TextFormat.PlainText)
-            name.setWordWrap(True)
-            name.setToolTip(str(path))
-            top.addWidget(name, 1)
-            top.addWidget(field)
-        layout.addLayout(top)
-        tools = QHBoxLayout()
-        self.mode = QComboBox()
-        self.mode.addItems([tr("En paralelo"), tr("Superponer"), tr("Diferencias")])
-        self.mode.setCurrentIndex(2)
-        self.mode.currentIndexChanged.connect(self.update_display)
-        tools.addWidget(self.mode)
-        tools.addWidget(button("Anterior", lambda: self.step(-1)))
-        tools.addWidget(button("Siguiente", lambda: self.step(1)))
-        tools.addWidget(button("Ajustar", lambda: self.set_zoom(None)))
-        tools.addWidget(button("100 %", lambda: self.set_zoom(100)))
-        tools.addStretch()
-        tools.addWidget(button("Cerrar", self.accept))
-        layout.addLayout(tools)
-
-        self.overlay_options = QWidget()
-        tools = QHBoxLayout(self.overlay_options)
-        tools.setContentsMargins(0, 0, 0, 0)
-        self.color = QComboBox()
-        for label, value in (("Gris", "#565b66"), ("Rosa", "#cb4180"), ("Azul", "#1466cb"), ("Rojo", "#d32032")):
-            self.color.addItem(tr(label), value)
-        self.color.setCurrentIndex(2)
-        self.color.currentIndexChanged.connect(self.update_display)
-        color_label = QLabel(tr("Color"))
-        color_label.setBuddy(self.color)
-        self.color.setAccessibleName(tr("Color de revisión"))
-        tools.addWidget(color_label)
-        tools.addWidget(self.color)
-        self.opacity = QSpinBox()
-        self.opacity.setRange(10, 100)
-        self.opacity.setValue(85)
-        self.opacity.setSuffix(" %")
-        self.opacity.setKeyboardTracking(False)
-        self.opacity.valueChanged.connect(self.update_display)
-        intensity_label = QLabel(tr("Intensidad"))
-        tools.addWidget(intensity_label)
-        tools.addWidget(self.opacity)
-        self.tint_controls = (color_label, self.color, intensity_label, self.opacity)
-        self.tolerance = QSpinBox()
-        self.tolerance.setRange(0, 100)
-        self.tolerance.setValue(20)
-        self.tolerance.setKeyboardTracking(False)
-        self.tolerance.setAccessibleName(tr("Tolerancia de diferencias"))
-        self.tolerance.setToolTip(tr("Aumenta la tolerancia para ignorar diferencias leves de color o suavizado."))
-        self.tolerance.valueChanged.connect(self.update_display)
-        tolerance_label = QLabel(tr("Tolerancia"))
-        tolerance_label.setBuddy(self.tolerance)
-        tools.addWidget(tolerance_label)
-        tools.addWidget(self.tolerance)
-        self.difference_controls = (tolerance_label, self.tolerance)
-        self.offsets = []
-        tools.addWidget(QLabel(tr("Alineación")))
-        for axis, label in (("X", "Desplazar X"), ("Y", "Desplazar Y")):
-            field = QDoubleSpinBox()
-            field.setRange(-1000, 1000)
-            field.setSuffix(" mm")
-            field.setKeyboardTracking(False)
-            field.setAccessibleName(tr(label))
-            field.setToolTip(tr(label))
-            field.valueChanged.connect(self.update_display)
-            self.offsets.append(field)
-            tools.addWidget(QLabel(axis))
-            tools.addWidget(field)
-        reset = button("Restablecer", self.reset_offset)
-        reset.setMinimumWidth(101)
-        tools.addWidget(reset)
-        tools.addStretch()
-        layout.addWidget(self.overlay_options)
-        self.overlay_options.hide()
-        self.legend = QLabel()
-        self.legend.setTextFormat(Qt.TextFormat.RichText)
-        self.legend.setWordWrap(True)
-        layout.addWidget(self.legend)
-        self.legend.hide()
-
-        self.display = QStackedWidget()
-        parallel = QWidget()
-        split = QHBoxLayout(parallel)
-        split.setContentsMargins(0, 0, 0, 0)
-        for index, view in enumerate(self.views):
-            split.addWidget(view, 1)
-            view.horizontalScrollBar().valueChanged.connect(lambda _, key=index: self.sync_scroll(key))
-            view.verticalScrollBar().valueChanged.connect(lambda _, key=index: self.sync_scroll(key))
-            view.zoom_changed.connect(lambda _, key=index: self.sync_zoom(key))
-        self.display.addWidget(parallel)
-        self.display.addWidget(self.overlay)
-        for view in (*self.views, self.overlay):
-            view.setBackgroundBrush(QColor("#e7eeea"))
-            view.set_mode("pan")
-            view.installEventFilter(self)
-            view.viewport().installEventFilter(self)
-        self.overlay.zoom_changed.connect(lambda _: self.remember_zoom(self.overlay))
-        layout.addWidget(self.display, 1)
-        self.status = QLabel(tr("Cargando páginas…"), objectName="muted")
-        self.status.setWordWrap(True)
-        self.status.setTextFormat(Qt.TextFormat.PlainText)
-        layout.addWidget(self.status)
-        self.timer = QTimer(self, singleShot=True, interval=45)
-        self.timer.timeout.connect(self.render_pair)
-        self.request_render()
-
-    def request_render(self, *_):
-        if hasattr(self, "timer"):
-            self.status.setText(tr("Cargando páginas…"))
-            self.timer.start()
-
-    def render_pair(self):
-        pages = tuple(field.value() - 1 for field, _ in self.page_inputs)
-        units = [values[index] for (_, values), index in zip(self.page_inputs, pages)]
-        try:
-            from plan_comparison import render_revision_pair
-            paths, passwords = zip(*self.inputs)
-            self.images, self.density = render_revision_pair(paths, passwords, pages, units)
-        except Exception as error:
-            self.images = None
-            for view in (*self.views, self.overlay):
-                view.page()
-            self.status.setText(str(error))
-            return
-        self.page_pair = pages
-        self.set_views(self.views, self.images)
-        self.update_display()
-
-    def set_views(self, views, images, *, reset=False):
-        self.locked = True
-        try:
-            for view, image in zip(views, images):
-                if reset or view.page_rect.isEmpty():
-                    center = None
-                else:
-                    center = view.mapToScene(view.viewport().rect().center())
-                    center = (center.x() / view.page_rect.width(), center.y() / view.page_rect.height())
-                view.page(image)
-                view.set_mode("pan")
-                self.apply_view_zoom(view)
-                if center:
-                    view.centerOn(center[0] * view.page_rect.width(), center[1] * view.page_rect.height())
-        finally:
-            self.locked = False
-
-    def update_display(self, *_):
-        mode = self.mode.currentIndex()
-        self.overlay_options.setVisible(bool(mode))
-        self.display.setCurrentIndex(int(bool(mode)))
-        for widget in self.tint_controls:
-            widget.setVisible(mode == 1)
-        for widget in self.difference_controls:
-            widget.setVisible(mode == 2)
-        self.legend.setVisible(mode == 2)
-        self.legend.setText(" &nbsp; ".join(
-            f'<span style="color:{color}; font-weight:600;">● {escape(tr(label))}</span>'
-            for color, label in (("#007d73", "Añadido"), ("#bb2535", "Quitado"), ("#a25c00", "Cambio de color"))
-        ))
-        if self.images is None:
-            return
-        changed = True
-        if mode:
-            from plan_comparison import highlight_differences, overlay_revision
-            try:
-                offset = [field.value() for field in self.offsets]
-                if mode == 2:
-                    merged, changed = highlight_differences(self.images, self.tolerance.value(), offset, self.density)
-                else:
-                    merged = overlay_revision(self.images, self.color.currentData(), self.opacity.value(), offset, self.density)
-                self.set_views((self.overlay,), (merged,))
-            except ValueError as error:
-                self.overlay.page()
-                self.status.setText(str(error))
-                return
-        self.set_zoom(self.zoom_percent)
-        a, b = self.page_pair
-        status = tr("Original · página {0}     Revisión · página {1}").format(a + 1, b + 1)
-        if not changed:
-            status += "   ·   " + tr("Sin diferencias visibles con esta tolerancia.")
-        self.status.setText(status)
-
-    def reset_offset(self):
-        for field in self.offsets:
-            with QSignalBlocker(field):
-                field.setValue(0)
-        self.update_display()
-
-    def step(self, direction):
-        if not all(field.minimum() <= field.value() + direction <= field.maximum() for field, _ in self.page_inputs):
-            return False
-        for field, _ in self.page_inputs:
-            with QSignalBlocker(field):
-                field.setValue(field.value() + direction)
-        self.request_render()
-        return True
-
-    def eventFilter(self, watched, event):
-        if event.type() == QEvent.Type.KeyPress and event.modifiers() == Qt.KeyboardModifier.NoModifier:
-            if event.key() in (Qt.Key.Key_Left, Qt.Key.Key_PageUp):
-                self.step(-1)
-                return True
-            if event.key() in (Qt.Key.Key_Right, Qt.Key.Key_PageDown):
-                self.step(1)
-                return True
-        if (event.type() == QEvent.Type.Wheel and not event.modifiers()
-                and abs(event.angleDelta().y()) >= 120):
-            for view in (*self.views, self.overlay):
-                if watched is view.viewport() and view.isVisible():
-                    bar = view.verticalScrollBar()
-                    direction = -1 if event.angleDelta().y() > 0 else 1
-                    edge = bar.minimum() if direction < 0 else bar.maximum()
-                    if bar.value() == edge and self.step(direction):
-                        return True
-        return super().eventFilter(watched, event)
-
-    def apply_view_zoom(self, view):
-        if self.zoom_percent is None:
-            view.fit_page()
-        else:
-            view.fit = False
-            view.set_zoom(self.zoom_percent / self.density * 96 / 7200)
-
-    def set_zoom(self, percent):
-        self.zoom_percent = percent
-        self.locked = True
-        try:
-            for view in (*self.views, self.overlay):
-                if not view.page_rect.isEmpty():
-                    self.apply_view_zoom(view)
-        finally:
-            self.locked = False
-
-    def remember_zoom(self, view):
-        if not self.locked and not view.fit and self.images is not None:
-            self.zoom_percent = view.transform().m11() * self.density * 7200 / 96
-
-    def sync_zoom(self, index):
-        source = self.views[index]
-        if self.locked or source.fit or self.mode.currentIndex():
-            return
-        self.remember_zoom(source)
-        self.locked = True
-        try:
-            self.apply_view_zoom(self.views[1 - index])
-        finally:
-            self.locked = False
-        self.sync_scroll(index)
-
-    def sync_scroll(self, index):
-        if self.locked or self.mode.currentIndex():
-            return
-        source, target = self.views[index], self.views[1 - index]
-        if source.page_rect.isEmpty() or target.page_rect.isEmpty():
-            return
-        self.locked = True
-        try:
-            center = source.mapToScene(source.viewport().rect().center())
-            target.centerOn(center.x() * target.page_rect.width() / source.page_rect.width(),
-                            center.y() * target.page_rect.height() / source.page_rect.height())
-        finally:
-            self.locked = False
-
-
-class MergeDialog(QDialog):
-    def __init__(self, parent, paths, names=None):
-        super().__init__(parent)
-        self.setWindowTitle(tr("Unir PDFs"))
-        self.resize(560, 390)
-        layout = QVBoxLayout(self)
-        note = QLabel(tr("Añade los archivos y arrástralos para ajustar el orden."))
-        note.setWordWrap(True)
-        layout.addWidget(note)
-        self.items = QListWidget()
-        self.items.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
-        layout.addWidget(self.items, 1)
-        self.with_index = QCheckBox(tr("Crear índice con un marcador por archivo"))
-        layout.addWidget(self.with_index)
-        actions = QHBoxLayout()
-        actions.addWidget(button("Añadir archivos", self.add_files))
-        actions.addWidget(button("Quitar", self.remove_file))
-        actions.addStretch()
-        layout.addLayout(actions)
-        choices = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-        self.accept_button = choices.button(QDialogButtonBox.StandardButton.Ok)
-        self.accept_button.setText(tr("Unir PDFs"))
-        self.accept_button.setObjectName("primary")
-        choices.button(QDialogButtonBox.StandardButton.Cancel).setText(tr("Cancelar"))
-        choices.accepted.connect(self.accept)
-        choices.rejected.connect(self.reject)
-        layout.addWidget(choices)
-        self.names = names or {}
-        self.add_paths(paths)
-
-    def add_files(self):
-        files, _ = QFileDialog.getOpenFileNames(self, tr("Añadir PDFs"), filter="PDF (*.pdf)")
-        self.add_paths(files)
-
-    def add_paths(self, paths):
-        for path in paths:
-            item = QListWidgetItem(self.names.get(str(path), Path(path).name))
-            item.setToolTip(str(path))
-            item.setData(Qt.ItemDataRole.UserRole, str(path))
-            self.items.addItem(item)
-        self.accept_button.setEnabled(self.items.count() >= 2)
-
-    def remove_file(self):
-        row = self.items.currentRow()
-        if row >= 0:
-            self.items.takeItem(row)
-        self.accept_button.setEnabled(self.items.count() >= 2)
-
-    def paths(self):
-        return [self.items.item(row).data(Qt.ItemDataRole.UserRole) for row in range(self.items.count())]
-
-
-class CertificateDialog(QDialog):
-    def __init__(self, parent, identities, warning=None):
-        super().__init__(parent)
-        self.setWindowTitle(tr("Certificado digital"))
-        self.resize(590, 420)
-        self.identity = None
-        self.pfx = None
-        self.password = None
-        self.warning = warning
-        layout = QVBoxLayout(self)
-        note = QLabel(tr("Elige un certificado personal válido y revisa los datos del titular antes de firmar."))
-        note.setWordWrap(True)
-        layout.addWidget(note)
-        self.options = QComboBox()
-        from pdf_sign import certificate_details
-
-        for identity in identities:
-            try:
-                details = certificate_details(base64.b64decode(identity["der"]))
-            except Exception:
-                details = identity
-            label = tr("{0}  ·  {1}  ·  vence {2}").format(
-                details.get("name", identity["name"]), details.get("organization") or details.get("issuer", identity["issuer"]),
-                details.get("not_after", identity["expiry"]),
-            )
-            self.options.addItem(label, identity)
-        if not identities:
-            self.options.addItem(tr("Consulta no disponible") if warning else tr("No hay certificados RSA aptos"))
-        layout.addWidget(self.options)
-        self.details = QLabel(objectName="muted")
-        self.details.setWordWrap(True)
-        self.details.setTextFormat(Qt.TextFormat.PlainText)
-        self.details.setMinimumHeight(145)
-        layout.addWidget(self.details, 1)
-        self.options.currentIndexChanged.connect(self.update_details)
-        self.update_details()
-        row = QHBoxLayout()
-        row.addWidget(button("Archivo .p12 / .pfx…", self.pick_file))
-        row.addStretch()
-        row.addWidget(button("Cancelar", self.reject))
-        from_store = button("Usar certificado", self.pick_identity, primary=True)
-        from_store.setEnabled(bool(identities))
-        row.addWidget(from_store)
-        layout.addLayout(row)
-
-    def update_details(self):
-        identity = self.options.currentData()
-        if not identity:
-            self.details.setText(
-                (self.warning or tr("Los almacenes personales del usuario y del equipo no contienen certificados RSA vigentes con clave privada y uso de firma."))
-                + tr("\nPuedes abrir un archivo .p12 o .pfx.")
-            )
-            return
-        from pdf_sign import certificate_details
-
-        try:
-            details = certificate_details(base64.b64decode(identity["der"]))
-        except Exception as error:
-            self.details.setText(tr("No se pudieron leer los datos del certificado: {0}").format(error))
-            return
-        state = tr("Vigente hoy") if details["valid_now"] else tr("Fuera de su periodo de validez hoy")
-        rows = [
-            tr("Titular: {0}").format(details["name"]),
-            tr("Empresa: {0}").format(details["organization"] or tr("No consta")),
-            f'{details["identifier_label"]}: {details["identifier"]}' if details["identifier"] else tr("DNI/NIF: no consta en el certificado"),
-            tr("Emisor: {0}").format(details["issuer"]),
-            tr("Validez: {0} — {1}").format(details["not_before"], details["not_after"]),
-            tr("Clave: {0} · {1}").format(details["key_algorithm"], state),
-            tr("Almacén: equipo local") if identity.get("location") == "LocalMachine" else tr("Almacén: usuario actual"),
-        ]
-        if details["unit"]:
-            rows.insert(2, tr("Unidad: {0}").format(details["unit"]))
-        if details["title"]:
-            rows.insert(3, tr("Cargo: {0}").format(details["title"]))
-        self.details.setText("\n".join(rows))
-
-    def pick_identity(self):
-        self.identity = self.options.currentData()
-        self.accept()
-
-    def pick_file(self):
-        path, _ = QFileDialog.getOpenFileName(self, tr("Certificado"), filter=tr("Certificados (*.p12 *.pfx)"))
-        if not path:
-            return
-        password, ok = QInputDialog.getText(
-            self, tr("Contraseña del certificado"), tr("Contraseña (déjala vacía si el archivo no tiene):"), QLineEdit.EchoMode.Password
-        )
-        if ok:
-            self.pfx, self.password = path, password
-            self.accept()
-
-
-class BatchDialog(QDialog):
-    def __init__(self, parent, sources, names=None):
-        super().__init__(parent)
-        self.setWindowTitle(tr("Firmar varios PDFs"))
-        self.resize(1080, 750)
-        self.sources = list(dict.fromkeys(sources))
-        self.names = names or {}
-        self.positions = {}
-        self.all_pages = set()
-        self.plans = {}
-        self.reader = None
-        self.coordinates = None
-        self.path = None
-        layout = QVBoxLayout(self)
-        title = QLabel(tr("Coloca una firma en cada PDF"), objectName="chapter")
-        layout.addWidget(title)
-        self.note = QLabel(tr("Arrastra sobre la página. El borde naranja marca campos ocupados."), objectName="muted")
-        self.note.setWordWrap(True)
-        layout.addWidget(self.note)
-        options = QHBoxLayout()
-        self.scope = QCheckBox(tr("Todas las páginas de este PDF"))
-        self.scope.setToolTip(tr("Se crea una firma digital por página. Windows puede solicitar el PIN varias veces."))
-        self.scope.toggled.connect(self.set_scope)
-        options.addWidget(self.scope)
-        self.repeat = button("Usar este recuadro en todo el lote…", self.repeat_position)
-        options.addWidget(self.repeat)
-        options.addStretch(1)
-        layout.addLayout(options)
-        row = QHBoxLayout()
-        self.files = QListWidget()
-        self.files.setFixedWidth(240)
-        self.files.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        for source in self.sources:
-            item = QListWidgetItem(self.names.get(source, Path(source).name))
-            item.setToolTip(source)
-            self.files.addItem(item)
-        row.addWidget(self.files)
-        self.view = PageView()
-        self.view.selected.connect(self.set_position)
-        row.addWidget(self.view, 1)
-        layout.addLayout(row, 1)
-
-        actions = QHBoxLayout()
-        actions.addWidget(QLabel(tr("Página")))
-        self.page_number = QSpinBox()
-        self.page_number.setMinimum(1)
-        self.page_number.valueChanged.connect(self.show_page)
-        actions.addWidget(self.page_number)
-        actions.addWidget(button("Borrar recuadro", self.clear_position))
-        actions.addWidget(button("−", lambda: self.view.zoom(0.8)))
-        actions.addWidget(button("Ajustar", self.view.fit_page))
-        actions.addWidget(button("+", lambda: self.view.zoom(1.25)))
-        actions.addStretch()
-        self.total = QLabel("", objectName="muted")
-        actions.addWidget(self.total)
-        actions.addWidget(button("Cancelar", self.reject))
-        self.confirm = button("Elegir certificado…", self.accept, primary=True)
-        actions.addWidget(self.confirm)
-        layout.addLayout(actions)
-        self.files.currentRowChanged.connect(self.open_source)
-        self.files.setCurrentRow(0)
-        self.refresh_total()
-
-    def refresh_total(self):
-        count = len(self.plans)
-        total_signatures = sum(len(plan) for plan in self.plans.values())
-        self.total.setText(tr("{0}/{1} PDF · {2} firmas").format(count, len(self.sources), total_signatures))
-        self.confirm.setEnabled(count == len(self.sources))
-        self.repeat.setEnabled(self.path in self.positions and len(self.sources) > 1 and self.reader is not None)
-
-    def sync_scope(self):
-        self.scope.blockSignals(True)
-        self.scope.setChecked(self.path in self.all_pages)
-        self.scope.setEnabled(self.reader is not None and len(self.reader.pages) > 1)
-        self.scope.blockSignals(False)
-
-    def update_file_label(self, source):
-        label = self.names.get(source, Path(source).name)
-        if source in self.positions:
-            page, _ = self.positions[source]
-            label += tr(" · {0} páginas").format(len(self.plans[source])) if source in self.all_pages else tr(" · pág. {0}").format(page + 1)
-        self.files.item(self.sources.index(source)).setText(label)
-
-    def open_source(self, row):
-        if row < 0:
-            return
-        self.path = self.sources[row]
-        try:
-            self.reader = reader_for(self.path)
-        except Exception as error:
-            self.reader = None
-            self.view.page()
-            self.note.setText(str(error))
-            self.sync_scope()
-            self.refresh_total()
-            return
-        self.sync_scope()
-        self.refresh_total()
-        page, _ = self.positions.get(self.path, (0, None))
-        self.page_number.blockSignals(True)
-        self.page_number.setMaximum(len(self.reader.pages))
-        self.page_number.setValue(page + 1)
-        self.page_number.blockSignals(False)
-        self.show_page()
-
-    def show_page(self):
-        if self.reader is None:
-            return
-        page = self.page_number.value() - 1
-        try:
-            with pdfium_reader(self.path) as document:
-                image, self.coordinates = render_page(document, page, width=1350, with_coordinates=True)
-            self.view.page(image)
-            self.refresh_guides()
-            self.note.setText(tr("Arrastra sobre la página. El borde naranja marca campos ocupados."))
-        except Exception as error:
-            self.coordinates = None
-            self.view.page()
-            self.note.setText(str(error))
-
-    def refresh_guides(self):
-        if self.reader is None or self.coordinates is None:
-            return
-        page = self.page_number.value() - 1
-        box = self.plans.get(self.path, {}).get(page)
-        self.view.set_mode("signature")
-        self.view.mark_boxes(
-            self.coordinates, signature_boxes(self.reader.pages[page]),
-            box,
-        )
-
-    def set_position(self, rect):
-        if self.coordinates is None:
-            return
-        page = self.page_number.value() - 1
-        box = self.coordinates.box(rect.left(), rect.top(), rect.right(), rect.bottom())
-        try:
-            plan = signature_plan(self.reader, page, box, all_pages=self.path in self.all_pages)
-        except ValueError as error:
-            self.note.setText(str(error))
-        else:
-            self.positions[self.path] = (page, box)
-            self.plans[self.path] = plan
-            self.update_file_label(self.path)
-            self.note.setText(tr("Recuadro colocado en {0} página(s). Puedes ajustarlo o reutilizarlo en el lote.").format(len(plan)))
-        self.refresh_guides()
-        self.refresh_total()
-
-    def clear_position(self):
-        if self.positions.pop(self.path, None):
-            self.plans.pop(self.path, None)
-            self.update_file_label(self.path)
-            if self.coordinates is not None:
-                self.refresh_guides()
-            self.refresh_total()
-
-    def set_scope(self, every_page):
-        if self.reader is None:
-            return
-        if self.path in self.positions:
-            page, box = self.positions[self.path]
-            try:
-                self.plans[self.path] = signature_plan(self.reader, page, box, all_pages=every_page)
-            except ValueError as error:
-                self.sync_scope()
-                self.note.setText(str(error))
-                return
-        if every_page:
-            self.all_pages.add(self.path)
-        else:
-            self.all_pages.discard(self.path)
-        self.update_file_label(self.path)
-        self.refresh_guides()
-        self.refresh_total()
-        self.note.setText(tr("Aplicado a todas las páginas de este PDF.") if every_page and self.path in self.plans
-                          else tr("Dibuja o ajusta el recuadro en el visor."))
-
-    def repeat_position(self):
-        if self.path not in self.positions:
-            return
-        page, box = self.positions[self.path]
-        same_page = tr("Solo la página {0} de cada PDF").format(page + 1)
-        all_pages = tr("Todas las páginas de cada PDF")
-        keep_scope = tr("Mantener el alcance de cada PDF")
-        choice, accepted = QInputDialog.getItem(
-            self, tr("Reutilizar recuadro"), tr("Dónde colocar el recuadro en los demás PDFs"),
-            [same_page, all_pages, keep_scope], 0, False,
-        )
-        if not accepted:
-            return
-        new_positions, new_plans, new_scope = {}, {}, set()
-        anchor = self.reader.pages[page]
-        for source in self.sources:
-            try:
-                reader = self.reader if source == self.path else reader_for(source)
-                whole = choice == all_pages or (choice == keep_scope and source in self.all_pages)
-                target = self.positions.get(source, (page, None))[0] if choice == keep_scope else page
-                if whole and target >= len(reader.pages):
-                    target = 0
-                if target >= len(reader.pages):
-                    raise ValueError(tr("El documento no tiene página {0}.").format(target + 1))
-                projected = box if source == self.path and page == target else project_signature_box(anchor, reader.pages[target], box)
-                new_plans[source] = signature_plan(reader, target, projected, all_pages=whole)
-                new_positions[source] = (target, projected)
-                if whole:
-                    new_scope.add(source)
-            except Exception as error:
-                name = self.names.get(source, Path(source).name)
-                self.note.setText(tr("{0}: {1} Coloca el recuadro por archivo o elige otra posición.").format(name, error))
-                return
-        self.positions, self.plans, self.all_pages = new_positions, new_plans, new_scope
-        for source in self.sources:
-            self.update_file_label(source)
-        self.sync_scope()
-        self.refresh_guides()
-        self.refresh_total()
-        self.note.setText(tr("Recuadro aplicado al lote. Puedes revisar y ajustar cada PDF antes de firmar."))
-
-    def placements(self):
-        return [(source, page, box) for source in self.sources for page, box in self.plans[source].items()]
-
-
-class Job(QThread):
-    progress = Signal(int, int)
-
-    def __init__(self, function, callback, parent, *, cancellable=False):
-        super().__init__(parent)
-        self.function = function
-        self.callback = callback
-        self.result = self.failure = None
-        self.cancellable = cancellable
-        self.cancelled = False
-
-    def run(self):
-        try:
-            self.result = self.function(self.report_progress)
-        except OperationCancelled:
-            self.cancelled = True
-        except Exception as error:
-            self.failure = str(error) or type(error).__name__
-        finally:
-            self.function = None
-
-    def report_progress(self, done, total):
-        if self.cancellable:
-            check_cancellation()
-        self.progress.emit(done, total)
-
-
-def check_cancellation(*_):
-    if QThread.currentThread().isInterruptionRequested():
-        raise OperationCancelled()
-
-
-class PageList(QListWidget):
-    page_mime = "application/x-pdfiu-pages"
-
-    def __init__(self, window):
-        super().__init__(objectName="pageList")
-        self.window = window
-        self.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
-        self.setDragDropMode(QAbstractItemView.DragDropMode.DragDrop)
-        self.setDropIndicatorShown(False)
-        self.setAutoScroll(False)
-        self.setToolTip(tr("Ctrl o Mayús para seleccionar varias páginas. Arrastra páginas o suelta un PDF entre miniaturas."))
-        self.insert_line = QFrame(self.viewport(), objectName="pageInsertLine")
-        self.insert_line.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-        self.insert_line.hide()
-        self.drag_point = None
-        self.insertion_index = None
-        self.drag_scroll = QTimer(self, interval=45)
-        self.drag_scroll.timeout.connect(self.scroll_during_drag)
-
-    @staticmethod
-    def pdf_paths(mime):
-        urls = mime.urls()
-        if urls and all(url.isLocalFile() and Path(url.toLocalFile()).suffix.lower() == ".pdf" for url in urls):
-            return [Path(url.toLocalFile()) for url in urls]
-        return []
-
-    def startDrag(self, _actions):
-        self.window.view.finish_inline()
-        path = self.window.path
-        indices = sorted(item.data(Qt.ItemDataRole.UserRole) for item in self.selectedItems())
-        if path is None or not indices or self.window.job is not None:
-            return
-        mime = QMimeData()
-        mime.setData(self.page_mime, json.dumps([str(path), indices]).encode())
-        drag = QDrag(self)
-        drag.setMimeData(mime)
-        thumbnail = self.item(indices[0]).icon()
-        if not thumbnail.isNull():
-            drag.setPixmap(thumbnail.pixmap(self.iconSize()))
-        drag.exec(Qt.DropAction.CopyAction)
-        drag.deleteLater()
-
-    def drop_sources(self, mime):
-        if not mime.hasFormat(self.page_mime):
-            return [(path, None) for path in self.pdf_paths(mime)]
-        data = bytes(mime.data(self.page_mime))
-        if len(data) > 1024 * 1024:
-            return []
-        try:
-            source, selection = json.loads(data)
-            path = Path(source)
-            if path.is_absolute() and path.suffix.lower() == ".pdf" and isinstance(selection, list) and selection and all(
-                type(index) is int and index >= 0 for index in selection
-            ):
-                return [(path, selection)]
-        except (ValueError, TypeError, RecursionError):
-            pass
-        return []
-
-    def insertion_at(self, point):
-        row = self.indexAt(QPoint(4, point.y())).row()
-        if row == -1:
-            return 0 if point.y() < 0 else self.count()
-        rect = self.visualItemRect(self.item(row))
-        return row + int(point.y() > rect.center().y())
-
-    def show_insertion(self, point):
-        position = self.insertion_at(point)
-        if position != self.insertion_index:
-            self.insertion_index = position
-            if position == self.count():
-                self.window.note(tr("Insertar al final · después de la página {0}").format(position))
-            else:
-                self.window.note(tr("Insertar antes de la página {0}").format(position + 1))
-        if position == self.count():
-            y = self.visualItemRect(self.item(position - 1)).bottom() + 1
-        else:
-            y = self.visualItemRect(self.item(position)).top()
-        y = max(0, min(y - 1, self.viewport().height() - 3))
-        self.insert_line.setGeometry(3, y, self.viewport().width() - 6, 3)
-        self.insert_line.show()
-        self.insert_line.raise_()
-
-    def scroll_during_drag(self):
-        if self.drag_point is None:
-            return
-        y = self.drag_point.y()
-        scroll = self.verticalScrollBar()
-        if y < 26:
-            scroll.setValue(scroll.value() - 16)
-        elif y >= self.viewport().height() - 26:
-            scroll.setValue(scroll.value() + 16)
-        self.show_insertion(self.drag_point)
-
-    def clear_insertion(self):
-        self.drag_point = None
-        self.insertion_index = None
-        self.drag_scroll.stop()
-        self.insert_line.hide()
-
-    def dragEnterEvent(self, event):
-        if (self.count() and self.window.job is None and event.possibleActions() & Qt.DropAction.CopyAction
-                and self.drop_sources(event.mimeData())):
-            event.setDropAction(Qt.DropAction.CopyAction)
-            event.accept()
-        else:
-            event.ignore()
-
-    def dragMoveEvent(self, event):
-        if not self.count() or self.window.job is not None:
-            self.clear_insertion()
-            event.ignore()
-            return
-        self.drag_point = event.position().toPoint()
-        self.show_insertion(self.drag_point)
-        if not self.drag_scroll.isActive():
-            self.drag_scroll.start()
-        event.setDropAction(Qt.DropAction.CopyAction)
-        event.accept()
-
-    def dragLeaveEvent(self, event):
-        self.clear_insertion()
-        event.accept()
-
-    def dropEvent(self, event):
-        self.clear_insertion()
-        sources = self.drop_sources(event.mimeData())
-        if (not sources or not self.count() or self.window.job is not None
-                or not event.possibleActions() & Qt.DropAction.CopyAction):
-            event.ignore()
-            return
-        position = self.insertion_at(event.position().toPoint())
-        event.setDropAction(Qt.DropAction.CopyAction)
-        event.accept()
-        if event.source() is self and sources[0][1] is not None:
-            self.window.reorder_pages(sources[0][1], position)
-        else:
-            self.window.insert_documents(position, sources)
-
-
-class WorkspaceList(QListWidget):
-    open_requested = Signal(QListWidgetItem)
-
-    def checkbox_rect(self, item):
-        option = QStyleOptionViewItem()
-        self.initViewItemOption(option)
-        option.rect = self.visualItemRect(item)
-        option.features |= QStyleOptionViewItem.ViewItemFeature.HasCheckIndicator
-        return self.style().subElementRect(QStyle.SubElement.SE_ItemViewItemCheckIndicator, option, self)
-
-    def mouseReleaseEvent(self, event):
-        point = event.position().toPoint()
-        item = self.itemAt(point)
-        if (item is None or event.button() != Qt.MouseButton.LeftButton or
-                event.modifiers() & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier)):
-            super().mouseReleaseEvent(event)
-            return
-        indicator = self.checkbox_rect(item)
-        super().mouseReleaseEvent(event)
-        if not indicator.contains(point):
-            self.open_requested.emit(item)
+from pdfiu_views import (
+    BookmarkRows, ContinuousPageView, Job, MEASURE_UNITS, PageCalibration, PageList, PageView,
+    SEARCH_PAGE_COUNT_ROLE, WorkDocument, WorkspaceList, action_menu, as_qimage, button,
+    check_cancellation, file_size_label, icon_button, search_result_item,
+)
+from pdfiu_dialogs import BatchDialog, CertificateDialog, CompressionPreview, MergeDialog, RevisionComparison
 
 
 class PDFiu(QMainWindow):
@@ -2088,6 +112,7 @@ class PDFiu(QMainWindow):
         self.current = 0
         self.coordinates = None
         self.job = None
+        self.update_job = None
         self.search_job = False
         self.search_pending = None
         self.search_result_key = None
@@ -3193,6 +1218,9 @@ class PDFiu(QMainWindow):
         remember = QCheckBox(tr("Recordar la última carpeta"))
         remember.setChecked(self.preferences.value("archivos/recordar_carpeta", True, type=bool))
         layout.addRow(tr("Archivos"), remember)
+        auto_updates = QCheckBox(tr("Comprobar actualizaciones al iniciar"))
+        auto_updates.setChecked(self.preferences.value("actualizaciones/comprobar_al_iniciar", False, type=bool))
+        layout.addRow(tr("Actualizaciones"), auto_updates)
         language = QComboBox()
         for text, code in ((tr("Idioma del sistema"), "system"), (tr("Español"), "es"), ("English", "en")):
             language.addItem(text, code)
@@ -3213,6 +1241,7 @@ class PDFiu(QMainWindow):
         if dialog.exec():
             self.preferences.setValue("vista/ajuste_inicial", zoom.currentData())
             self.preferences.setValue("archivos/recordar_carpeta", remember.isChecked())
+            self.preferences.setValue("actualizaciones/comprobar_al_iniciar", auto_updates.isChecked())
             self.preferences.setValue("idioma/interfaz", language.currentData())
             if not remember.isChecked():
                 self.preferences.remove("archivos/ultima_carpeta")
@@ -3221,20 +1250,128 @@ class PDFiu(QMainWindow):
                 self.error(tr("No se pudieron guardar las preferencias."))
 
     def show_about(self):
-        QMessageBox.about(self, tr("Acerca de {0}").format(APP_NAME),
-                          tr("{0} {1}\nEditor de PDF gratuito para trabajar en tu equipo.").format(APP_NAME, APP_VERSION))
+        dialog = QDialog(self)
+        dialog.setWindowTitle(tr("Acerca de {0}").format(APP_NAME))
+        dialog.setMinimumWidth(460)
+        layout = QVBoxLayout(dialog)
+        layout.setSpacing(12)
 
-    def check_updates(self):
-        if self.job is not None:
+        header = QHBoxLayout()
+        header.setSpacing(12)
+        logo = QLabel()
+        logo.setPixmap(brand_icon().pixmap(48, 48))
+        logo.setAlignment(Qt.AlignmentFlag.AlignTop)
+        header.addWidget(logo)
+        title_box = QVBoxLayout()
+        title_box.setSpacing(4)
+        title = QLabel(f"<b>{escape(APP_NAME)} {escape(APP_VERSION)}</b>")
+        title.setTextFormat(Qt.TextFormat.RichText)
+        summary = QLabel(tr("Lector y editor de PDF de código abierto para trabajar en tu equipo."))
+        summary.setWordWrap(True)
+        copyright_note = QLabel(
+            tr("© 2026 mfcb89 · Código fuente bajo licencia MIT. Nombre y logotipos reservados."),
+            objectName="muted",
+        )
+        copyright_note.setWordWrap(True)
+        title_box.addWidget(title)
+        title_box.addWidget(summary)
+        title_box.addWidget(copyright_note)
+        header.addLayout(title_box, 1)
+        layout.addLayout(header)
+
+        notices = QLabel(
+            tr(
+                "PDFiu utiliza Qt y PySide6 bajo LGPLv3 (cargados como bibliotecas dinámicas sustituibles), "
+                "PDFium / pypdfium2, Tesseract OCR, pyHanko, pypdf y Fluent UI System Icons. "
+                "Consulta los avisos de terceros y el texto de las licencias incluidos con esta copia."
+            )
+        )
+        notices.setWordWrap(True)
+        layout.addWidget(notices)
+
+        repo_link = QLabel(
+            '<a href="https://github.com/mfcb89/pdfiu">github.com/mfcb89/pdfiu</a>'
+        )
+        repo_link.setOpenExternalLinks(True)
+        layout.addWidget(repo_link)
+
+        actions = QHBoxLayout()
+        notices_path = ROOT / "third-party" if (ROOT / "third-party").is_dir() else ROOT / "THIRD_PARTY_NOTICES.md"
+        if notices_path.exists():
+            notices_btn = QPushButton(tr("Avisos de terceros"))
+            notices_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(notices_path))))
+            actions.addWidget(notices_btn)
+        license_path = ROOT / "LICENSE"
+        if license_path.is_file():
+            license_btn = QPushButton(tr("Licencia MIT"))
+            license_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(license_path))))
+            actions.addWidget(license_btn)
+        qt_btn = QPushButton(tr("Acerca de Qt…"))
+        qt_btn.clicked.connect(lambda: QMessageBox.aboutQt(dialog, tr("Acerca de Qt")))
+        actions.addWidget(qt_btn)
+        actions.addStretch(1)
+        layout.addLayout(actions)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons.button(QDialogButtonBox.StandardButton.Close).setText(tr("Cerrar"))
+        buttons.rejected.connect(dialog.accept)
+        layout.addWidget(buttons)
+        dialog.exec()
+
+    def schedule_update_check(self):
+        if not self.preferences.value("actualizaciones/comprobar_al_iniciar", False, type=bool):
+            return
+        last_checked = self.preferences.value("actualizaciones/ultima_comprobacion", 0, type=int)
+        if int(time.time()) - last_checked < 86400:
+            return
+        self.check_updates(silent=True)
+
+    def show_update_dialog(self, release):
+        dialog = QMessageBox(self)
+        dialog.setWindowTitle(tr("Actualización disponible"))
+        dialog.setText(
+            tr("Ya está disponible {0} {1}. Tienes instalada la versión {2}.").format(
+                APP_NAME, release.version, APP_VERSION
+            )
+        )
+        details = []
+        if release.notes:
+            details.append(release.notes)
+        if release.sha256:
+            details.append(f"SHA-256: {release.sha256}")
+        if details:
+            dialog.setInformativeText("\n\n".join(details))
+        open_release = dialog.addButton(tr("Abrir página de descarga"), QMessageBox.ButtonRole.AcceptRole)
+        skip_release = dialog.addButton(tr("Omitir esta versión"), QMessageBox.ButtonRole.DestructiveRole)
+        dialog.addButton(tr("Ahora no"), QMessageBox.ButtonRole.RejectRole)
+        dialog.exec()
+        clicked = dialog.clickedButton()
+        if clicked == skip_release:
+            self.preferences.setValue("actualizaciones/version_omitida", release.version)
+            self.preferences.sync()
+        elif clicked == open_release and not QDesktopServices.openUrl(QUrl(release.url)):
+            QMessageBox.warning(self, tr("Actualizaciones"), tr("No se pudo abrir la página de descarga."))
+
+    def check_updates(self, silent=False):
+        if not silent and self.job is not None:
+            return
+        if silent and self.update_job is not None:
             return
         try:
             channel = update_channel()
         except (OSError, ValueError) as error:
-            QMessageBox.warning(self, tr("Actualizaciones"), str(error))
+            if not silent:
+                QMessageBox.warning(self, tr("Actualizaciones"), str(error))
             return
         if not channel:
-            QMessageBox.information(self, tr("Actualizaciones"),
-                                    tr("Tienes {0} {1}. Esta compilación aún no tiene un canal de publicación.").format(APP_NAME, APP_VERSION))
+            if not silent:
+                QMessageBox.information(
+                    self,
+                    tr("Actualizaciones"),
+                    tr("Tienes {0} {1}. Esta compilación aún no tiene un canal de publicación.").format(
+                        APP_NAME, APP_VERSION
+                    ),
+                )
             return
 
         def check(_):
@@ -3243,24 +1380,43 @@ class PDFiu(QMainWindow):
             except (OSError, ValueError) as error:
                 return None, str(error)
 
+        if silent:
+            def finish():
+                job = self.update_job
+                self.update_job = None
+                if job is None or job.failure or job.result is None:
+                    return
+                release, error = job.result
+                if error is not None:
+                    return
+                self.preferences.setValue("actualizaciones/ultima_comprobacion", int(time.time()))
+                self.preferences.sync()
+                if release is None:
+                    return
+                skipped = self.preferences.value("actualizaciones/version_omitida", "")
+                if skipped == release.version:
+                    return
+                if self.isVisible():
+                    self.show_update_dialog(release)
+
+            job = Job(check, None, self)
+            job.finished.connect(finish)
+            self.update_job = job
+            job.start()
+            return
+
         def show(result):
             release, error = result
             self.note(tr("Consulta de actualizaciones terminada."))
             if error is not None:
                 QMessageBox.warning(self, tr("Actualizaciones"), tr("No se pudo consultar el canal. ") + error)
                 return
+            self.preferences.setValue("actualizaciones/ultima_comprobacion", int(time.time()))
+            self.preferences.sync()
             if release is None:
                 QMessageBox.information(self, tr("Actualizaciones"), tr("Ya tienes la última versión ({0}).").format(APP_VERSION))
                 return
-            version, url = release
-            dialog = QMessageBox(self)
-            dialog.setWindowTitle(tr("Actualización disponible"))
-            dialog.setText(tr("Ya puedes descargar {0} {1}. Tienes instalada la versión {2}.").format(APP_NAME, version, APP_VERSION))
-            open_release = dialog.addButton(tr("Abrir página de descarga"), QMessageBox.ButtonRole.AcceptRole)
-            dialog.addButton(tr("Ahora no"), QMessageBox.ButtonRole.RejectRole)
-            dialog.exec()
-            if dialog.clickedButton() == open_release and not QDesktopServices.openUrl(QUrl(url)):
-                QMessageBox.warning(self, tr("Actualizaciones"), tr("No se pudo abrir la página de descarga."))
+            self.show_update_dialog(release)
 
         self.start_job(tr("Buscando actualizaciones…"), check, show, preserve_selection=True)
 
@@ -7553,6 +5709,10 @@ class PDFiu(QMainWindow):
             self.view.zoom_render.stop()
             self.view.scroll_render.stop()
             self.thumbnail_timer.stop()
+            if self.update_job is not None:
+                self.update_job.quit()
+                self.update_job.wait(500)
+                self.update_job = None
             for key in list(self.document_views):
                 self.close_secondary_views(key)
             self.temp.cleanup()
@@ -7599,6 +5759,7 @@ def main():
     window.startup.finish(window)
     window.startup = None
     QTimer.singleShot(0, window, window.recover_interrupted_work)
+    QTimer.singleShot(3000, window, window.schedule_update_check)
     if len(sys.argv) == 3 and sys.argv[1] == "--combine-selection" and sys.platform == "win32":
         def combine_selection():
             try:

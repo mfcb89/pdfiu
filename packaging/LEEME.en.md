@@ -17,7 +17,7 @@ ISCC.exe packaging/windows.iss
 
 Find the installer in `build/installer`. The version comes from `release_info.py`. Use `--dry-run` to inspect the PyInstaller command. Test installation, update, uninstall, launch without Python, OCR in both languages, and both the Windows certificate store and PFX signing.
 
-An optional `--updates-url` argument accepts an HTTPS link to an update manifest. The manifest uses `version` and `url` fields. The update command opens the download page if there is a newer version.
+An optional `--updates-url` argument accepts an HTTPS link to an update manifest. The manifest uses `version` and `url` fields, and optionally `notes` and `sha256`. **Help → Check for updates** (and the optional startup check in **Preferences**) opens the download page if a newer version is available.
 
 ## macOS
 

@@ -2,7 +2,7 @@
 
 **Español** · [English](#english)
 
-La licencia MIT de PDFiu cubre el código y los recursos originales del proyecto. Cada dependencia y recurso de terceros conserva su licencia y sus titulares.
+La licencia MIT de PDFiu cubre el código fuente original del proyecto. El nombre y los logotipos oficiales se rigen por la [política de marca](TRADEMARKS.md). Cada dependencia y recurso de terceros conserva su licencia y sus titulares.
 
 - Los iconos de interfaz proceden de Fluent UI System Icons (paquete SVG 1.1.347 de Microsoft), bajo licencia MIT. [Aviso de Fluent UI System Icons](assets/fluent/LICENSE)
 - La fuente Bitstream Vera se incrusta en la apariencia de las firmas de PDF/A. [Licencia de Bitstream Vera](assets/fonts/bitstream-vera-license.txt)
@@ -16,7 +16,7 @@ Antes de ofrecer públicamente un binario, el distribuidor debe verificar las li
 
 ## English
 
-PDFiu's [MIT License](LICENSE) covers its original code and assets. Third-party dependencies and assets keep their own license terms and copyright notices.
+PDFiu's [MIT License](LICENSE) covers its original source code. The PDFiu name and official logos are governed by the [brand policy](TRADEMARKS.md#pdfiu-trademark-and-brand-policy). Third-party dependencies and assets keep their own license terms and copyright notices.
 
 | Component | Notices |
 | --- | --- |

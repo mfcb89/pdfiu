@@ -43,7 +43,7 @@ def main():
     notices = output / "third-party"
     icon_format = "ico" if sys.platform == "win32" else "icns"
     command = [
-        sys.executable, "-m", "PyInstaller", "--onedir", "--windowed", "--name", APP_NAME,
+        sys.executable, "-m", "PyInstaller", "--noconfirm", "--onedir", "--windowed", "--name", APP_NAME,
         "--icon", str(ROOT / "assets" / "brand" / f"pdfiu-app.{icon_format}"),
         "--exclude-module", "numpy",
         "--exclude-module", "pyphen",
@@ -60,6 +60,7 @@ def main():
         (ROOT / "LEEME.md", "."),
         (ROOT / "USER_GUIDE.en.md", "."),
         (ROOT / "LICENSE", "."),
+        (ROOT / "TRADEMARKS.md", "."),
         (ROOT / "THIRD_PARTY_NOTICES.md", "."),
         (notices, "third-party"),
         (args.tessdata / "spa.traineddata", "runtime/tessdata"),

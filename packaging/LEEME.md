@@ -20,13 +20,18 @@ La instalación es por usuario. El desinstalador retira los archivos instalados,
 
 Conserva el `AppId` y el ámbito por usuario. Cada versión debe tener su propio número. Instala primero una versión y actualiza con la siguiente sobre la misma carpeta. Comprueba que queda una sola entrada en Aplicaciones instaladas, que se conservan las preferencias y que el desinstalador retira los archivos de ambas versiones.
 
-**Ayuda → Buscar actualizaciones** consulta el canal incluido al compilar con `--updates-url https://tu-dominio/updates.json` y ofrece abrir la página de la nueva versión en el navegador. El manifiesto admite un número de versión con tres partes y una URL HTTPS indicando dónde descargar los instaladores firmados:
+**Ayuda → Buscar actualizaciones** (y la comprobación opcional al iniciar en **Preferencias**) consulta el canal incluido al compilar con `--updates-url https://tu-dominio/updates.json` y ofrece abrir la página de la nueva versión en el navegador. El manifiesto admite un número de versión con tres partes, una URL HTTPS y, opcionalmente, un resumen de cambios (`notes`) y el hash `sha256` del instalador oficial:
 
 ```json
-{"version":"0.2.1","url":"https://tu-dominio/descargas/0.2.1"}
+{
+  "version": "0.10.40",
+  "url": "https://tu-dominio/descargas/0.10.40",
+  "notes": "Resumen breve de mejoras.",
+  "sha256": "..."
+}
 ```
 
-Si omites `--updates-url`, la consulta muestra la versión instalada y avisa de que el canal aún no está configurado.
+Si omites `--updates-url`, PDFiu consulta por defecto el manifiesto público `updates.json` del repositorio oficial (`https://raw.githubusercontent.com/mfcb89/pdfiu/main/updates.json`). Pasa `--updates-url` si quieres apuntar a tu propio dominio o canal.
 
 ## macOS
 

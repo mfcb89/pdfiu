@@ -9,6 +9,11 @@
 AppId={{AA1A6AE8-ED3A-4E53-8F00-B27DFB63F8FD}
 AppName={#ProductName}
 AppVersion={#ReleaseVersion}
+AppPublisher=mfcb89
+AppPublisherURL=https://github.com/mfcb89/pdfiu
+AppSupportURL=https://github.com/mfcb89/pdfiu/issues
+AppUpdatesURL=https://github.com/mfcb89/pdfiu/releases
+LicenseFile=..\LICENSE
 DefaultDirName={localappdata}\Programs\{#ProductName}
 DefaultGroupName={#ProductName}
 UsePreviousGroup=no

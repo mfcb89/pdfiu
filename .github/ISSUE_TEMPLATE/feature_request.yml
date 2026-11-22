@@ -1,0 +1,21 @@
+name: Proponer una mejora / Feature request
+description: Sugiere una nueva función o mejora para PDFiu / Suggest a new feature or improvement
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problema o necesidad / Problem or use case
+      description: ¿Qué tarea intentas hacer hoy y qué te falta o resulta incómodo?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Solución propuesta / Proposed solution
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternativas o contexto / Alternatives or context
