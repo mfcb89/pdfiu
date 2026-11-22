@@ -858,7 +858,7 @@ class PDFiu(QMainWindow):
         add(view, tr("Mostrar u ocultar herramientas"), self.toggle_tool_panel)
 
         help_menu = bar.addMenu(tr("A&yuda"))
-        add(help_menu, tr("Paleta de comandos…"), self.open_command_palette, QKeySequence("Ctrl+K"))
+        add(help_menu, tr("Paleta de comandos…"), self.open_command_palette, None, "Ctrl+K")
         add(help_menu, tr("Visita guiada…"), self.start_tour)
         add(help_menu, tr("Guía de herramientas…"), self.open_welcome_guide, key.HelpContents)
         self.menu_update = add(help_menu, tr("&Buscar actualizaciones…"), self.check_updates)
