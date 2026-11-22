@@ -49,6 +49,7 @@ from session_recovery import RecoveryJournal, interrupted_sessions, retain_unrec
 from pdf_print import document_sizes, print_pages
 from pdf_print_dialog import PrintDialog
 from pdf_archive import PROFILES, archive_tools, export_archive
+from app_logging import log_directory, setup_logging
 from pdfiu_views import (
     BookmarkRows, ContinuousPageView, Job, MEASURE_UNITS, PageCalibration, PageList, PageView,
     SEARCH_PAGE_COUNT_ROLE, WorkDocument, WorkspaceList, action_menu, as_qimage, button,
@@ -844,6 +845,7 @@ class PDFiu(QMainWindow):
         add(help_menu, tr("Visita guiada…"), self.start_tour)
         add(help_menu, tr("Guía de herramientas…"), self.open_welcome_guide, key.HelpContents)
         self.menu_update = add(help_menu, tr("&Buscar actualizaciones…"), self.check_updates)
+        add(help_menu, tr("Abrir carpeta de registros…"), self.open_logs_folder)
         about = add(help_menu, tr("&Acerca de {0}").format(APP_NAME), self.show_about)
         about.setMenuRole(QAction.MenuRole.AboutRole)
 
@@ -1248,6 +1250,12 @@ class PDFiu(QMainWindow):
             self.preferences.sync()
             if self.preferences.status() != QSettings.Status.NoError:
                 self.error(tr("No se pudieron guardar las preferencias."))
+
+    def open_logs_folder(self):
+        folder = log_directory(APP_NAME)
+        folder.mkdir(parents=True, exist_ok=True)
+        if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder))):
+            self.error(tr("No se pudo abrir la carpeta de registros."))
 
     def show_about(self):
         dialog = QDialog(self)
@@ -5736,6 +5744,7 @@ def read_explorer_selection(token):
 
 
 def main():
+    setup_logging(APP_NAME, APP_VERSION)
     if WINDOWS_BUNDLE:
         import ctypes
         from ctypes import wintypes
