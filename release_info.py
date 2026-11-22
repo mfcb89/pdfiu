@@ -8,7 +8,7 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 
 APP_NAME = "PDFiu"
-APP_VERSION = "0.10.38"
+APP_VERSION = "0.10.39"
 
 
 def https_url(value):

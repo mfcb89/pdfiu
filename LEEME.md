@@ -1,4 +1,8 @@
-# PDFiu
+# Manual de PDFiu
+
+**Español** · [English](USER_GUIDE.en.md) · [Inicio](README.md)
+
+## Empezar
 
 **PDF firmados y protegidos.** Introduce la contraseña de apertura para leer el PDF original y consultar sus firmas. Al desbloquear o editar un PDF firmado, PDFiu avisa y trabaja sobre una copia sin firmas. Guarda la copia con otro nombre para conservar el documento firmado original.
 
@@ -18,25 +22,31 @@
 
 **Buscar texto.** Escribe para ver coincidencias sin salir de la página. Marca **Distinguir tildes** si quieres que `medicion` y `medición` se busquen por separado. En **Búsqueda avanzada**, `(plano OR croquis) AND NOT borrador` encuentra todas las páginas que tienen alguno de los dos primeros términos y carecen de «borrador». Escribe los operadores en mayúsculas y pon entre comillas una palabra completa o una frase, como `"health and safety"`. Deja el ratón sobre la casilla para ver más ejemplos. Selecciona un resultado y pulsa **Coincidencias de la página…** para elegir un fragmento.
 
-Aplicación local para Windows. En este equipo, abre la carpeta `outputs\Folio PDF` y haz doble clic en **Iniciar PDFiu.cmd**. Puedes arrastrar un PDF sobre el lanzador o varios sobre la ventana.
+Para iniciar PDFiu desde el código, prepara el entorno indicado en el [README](README.md#ejecutar-desde-el-código) y abre **Iniciar PDFiu.cmd**. Puedes arrastrar un PDF sobre el lanzador o varios sobre la ventana.
 
 En el primer inicio, **Ver bienvenida** abre el PDF y resalta el control que debes usar para abrir un anexo, seleccionar ambos archivos, unirlos y guardar el resultado. Después puedes continuar con las herramientas principales. **Ahora no** oculta el aviso. Puedes repetir la práctica desde **Ayuda → Visita guiada…**. **Ayuda → Guía de herramientas…** recorre doce funciones, incluidas extraer páginas, añadirlas arrastrando, desbloquear y comprimir. Puedes avanzar con **Siguiente** para localizarlas. Deja el ratón sobre las herramientas para leer su explicación. **Buscar** o **Ctrl+F** abre los resultados con página y contexto. Pulsa un resultado o usa las flechas para navegar.
 
 **Archivo → Documentos recientes** recupera hasta diez PDF abiertos. Los últimos también aparecen al iniciar sin un documento. Puedes borrar la lista desde ese menú. En **Edición → Preferencias → Idioma de la interfaz** puedes elegir el idioma del sistema, Español o English. Reinicia PDFiu para aplicar el cambio. La visita y los PDF de ejemplo se abren en el idioma elegido.
 
-En Windows x64 puedes usar el instalador de PDFiu. En este equipo, el lanzador de desarrollo usa el entorno preparado en `Documentos\Codex\tools\folio-pdf`. En **Edición → Preferencias** puedes elegir el zoom inicial, recordar la última carpeta y personalizar favoritos. En **Ayuda** puedes ver la versión y buscar actualizaciones si la compilación incluye un canal.
+En Windows x64 también puedes usar una compilación de PDFiu. En **Edición → Preferencias** puedes elegir el zoom inicial, recordar la última carpeta y personalizar favoritos. En **Ayuda** puedes ver la versión y buscar actualizaciones si la compilación incluye un canal.
 
 Para actualizar, ejecuta el instalador nuevo. Por defecto usa la carpeta de tu instalación anterior. Si PDFiu está abierto, el instalador te ofrece cerrar sus ventanas y puedes guardar los cambios desde PDFiu antes de continuar.
+
+## Mesa de trabajo y Windows
 
 En **Archivos**, selecciona uno o varios PDF de la mesa y pulsa **Supr** para quitarlos de la lista sin borrar los archivos del disco.
 
 Con el instalador de Windows, busca **.pdf** en **Configuración → Aplicaciones → Aplicaciones predeterminadas** para elegir PDFiu como lector. Para unir archivos, selecciónalos en el Explorador y haz clic derecho en **Combinar archivos con PDFiu**. En Windows 11, busca la opción en **Mostrar más opciones**. Se abre el diálogo donde puedes ordenar los archivos antes de unirlos.
+
+## Exportar documentos
 
 En **Archivo → Exportar → Word (.docx)**, **Con formato** mantiene editable el texto y reconstruye tamaños, fuentes, colores, imágenes y tablas. La distribución es aproximada, especialmente si hay columnas o dibujos complejos. Las páginas sin texto editable se incluyen como imagen. **Texto y tablas básicos** usa el formato de Word y permite aplicar OCR a las páginas sin texto.
 
 En los diálogos de exportación puedes elegir todo el documento, la página actual o un rango. **Excel (.xlsx)** y **CSV** extraen tablas; **TXT** exporta texto plano. Para extraer tablas de un escaneo, ejecuta el OCR del documento y activa la detección de columnas alineadas.
 
 **Archivo → Exportar → Markdown (.md)** extrae párrafos y tablas, con un encabezado para cada página del PDF. Puedes aplicar OCR a las páginas sin texto, alternar entre la vista previa y el Markdown y copiarlo o guardarlo directamente desde la vista previa.
+
+## Firmas, edición y herramientas
 
 - **Firmar con certificado.** Abre el PDF, pulsa el botón y arrastra sobre la página para dibujar el recuadro. PDFiu consulta los almacenes personales del usuario actual y del equipo. Ofrece certificados RSA vigentes con clave privada y uso de firma. Al firmar, Windows puede pedir el PIN o comprobar los permisos sobre la clave. El selector muestra el titular, el DNI/NIE/NIF cuando figura en el certificado, la empresa, el emisor y la vigencia. También admite archivos `.p12` y `.pfx`. Guarda el PDF firmado con un nombre distinto al del original. La firma es PAdES básica con SHA-256.
 - **Explorar firmas.** Cuando PDFiu detecta firmas digitales, aparece una cinta sobre el documento. Pulsa **Ver firma** o **Ver firmas** para abrir la lista, o pulsa un recuadro de firma en la página para ver los detalles de esa firma. Las firmas sin recuadro se pueden consultar desde la cinta. El panel muestra titular, DNI/NIE/NIF si está declarado en el certificado, empresa, emisor, algoritmo, periodo de vigencia, fecha declarada y cobertura. La detección y la lectura de esos datos son independientes de la validación criptográfica y de confianza.
@@ -77,16 +87,15 @@ Las recetas de compilación para el instalador de Windows y el paquete de macOS 
 
 La interfaz incluye una selección de [Fluent UI System Icons](https://github.com/microsoft/fluentui-system-icons), versión 1.1.347 del paquete `@fluentui/svg-icons`. Los SVG se cargan desde el equipo y la licencia MIT del conjunto se conserva en `assets/fluent/LICENSE`.
 
-## Preparar la aplicación en otro equipo
+## Preparar los modelos de OCR
 
-Con Python 3.12 de 64 bits, ejecuta estos comandos en PowerShell desde la carpeta de la aplicación:
+Después de instalar las dependencias del [README](README.md#ejecutar-desde-el-código), ejecuta estos comandos en PowerShell desde la carpeta del proyecto.
 
 ```powershell
-py -3.12 -m pip install --target .\runtime\deps -r .\requirements.txt
 New-Item -ItemType Directory -Force -Path .\runtime\tessdata | Out-Null
 foreach ($lang in @('spa', 'eng')) {
     Invoke-WebRequest "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/4.1.0/$lang.traineddata" -OutFile ".\runtime\tessdata\$lang.traineddata"
 }
 ```
 
-Abre el lanzador tras instalar las dependencias.
+Abre PDFiu y usa **Documento → Reconocer texto (OCR)** para elegir las páginas y el idioma.

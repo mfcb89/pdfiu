@@ -100,7 +100,7 @@ def layer_preview(source, destination, visibility, *, password=None):
 def prepare_recipe(inputs, folder, tessdata, languages, ocr, numbering, progress):
     folder = Path(folder)
     used = {file.name.casefold() for file in folder.iterdir()}
-    with TemporaryDirectory(prefix=".folio-proceso-", dir=folder) as directory:
+    with TemporaryDirectory(prefix=".pdfiu-proceso-", dir=folder) as directory:
         staging = Path(directory)
         outputs = []
         for index, (source, display_name) in enumerate(inputs):

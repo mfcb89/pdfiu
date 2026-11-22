@@ -27,7 +27,7 @@ from reportlab.lib.utils import ImageReader
 @contextmanager
 def atomic_output(destination):
     destination = Path(destination)
-    with NamedTemporaryFile(dir=destination.parent, prefix=".folio-", suffix=".tmp", delete=False) as stream:
+    with NamedTemporaryFile(dir=destination.parent, prefix=".pdfiu-", suffix=".tmp", delete=False) as stream:
         temporary = Path(stream.name)
     try:
         yield temporary
@@ -473,10 +473,10 @@ def place_widget_appearance(writer, page, widget, appearance):
     if "/XObject" in resources:
         xobjects.update(resources["/XObject"])
     suffix = len(xobjects)
-    name = NameObject(f"/FolioField{suffix}")
+    name = NameObject(f"/PDFiuField{suffix}")
     while name in xobjects:
         suffix += 1
-        name = NameObject(f"/FolioField{suffix}")
+        name = NameObject(f"/PDFiuField{suffix}")
     xobjects[name] = appearance.indirect_reference or writer._add_object(appearance)
     resources[NameObject("/XObject")] = xobjects
     page[NameObject("/Resources")] = resources
@@ -1256,7 +1256,7 @@ def write_compressed_copy(reader, before, destination, quality, dpi, compact, fa
         writer.compress_identical_objects(remove_identicals="/OCProperties" not in writer.root_object, remove_orphans=True)
     if progress:
         progress(image_count + object_count, image_count + object_count)
-    with TemporaryDirectory(prefix=".folio-compresion-", dir=destination.parent) as folder:
+    with TemporaryDirectory(prefix=".pdfiu-compresion-", dir=destination.parent) as folder:
         temporary = Path(folder) / "candidato.pdf"
         writer.write(temporary)
         after = temporary.stat().st_size
@@ -1321,7 +1321,7 @@ def redact_searchable_copy(source, destination, page_boxes, tessdata, languages,
     total = len(reader_for(source).pages)
     marked = [index for index, boxes in page_boxes.items() if boxes]
     final_total = total + len(marked)
-    with TemporaryDirectory(prefix=".folio-censura-", dir=Path(destination).parent) as folder:
+    with TemporaryDirectory(prefix=".pdfiu-censura-", dir=Path(destination).parent) as folder:
         raster = Path(folder) / "censurado.pdf"
         redact_copy(source, raster, page_boxes, lambda current, _: progress(current, final_total))
         recognized = ocr_document(
@@ -1610,7 +1610,7 @@ def add_surface_annotation(source, destination, page, points, label, measured, u
     annotation[NameObject("/IC")] = ArrayObject(FloatObject(value) for value in color)
     annotation[NameObject("/F")] = NumberObject(4)
     annotation[NameObject("/Contents")] = TextStringObject(f"{label} · {measured:.3f} {unit}")
-    annotation[NameObject("/FolioSurface")] = DictionaryObject({
+    annotation[NameObject("/PDFiuSurface")] = DictionaryObject({
         NameObject("/Name"): TextStringObject(label),
         NameObject("/Area"): FloatObject(measured),
         NameObject("/Unit"): TextStringObject(unit),
@@ -1638,7 +1638,7 @@ def surface_records(reader):
     for page, sheet in enumerate(reader.pages):
         for position, reference in enumerate(sheet.get("/Annots", ())):
             mark = reference.get_object()
-            data = mark.get("/FolioSurface")
+            data = mark.get("/PDFiuSurface", mark.get("/FolioSurface"))
             if data is None:
                 continue
             data = data.get_object()
@@ -1710,12 +1710,12 @@ def shape_appearance(writer, annotation, kind, rect, start, end, color, stroke, 
     dash = f"[{stroke*3} {stroke*2}] 0 d" if dashed else ""
     fill_color = f"{red} {green} {blue} rg" if filled else ""
     appearance.set_data(
-        f"q /FolioOpacity gs {red} {green} {blue} RG {fill_color} {stroke} w 1 J 1 j {dash} {path} {'B' if filled else 'S'} Q".encode("ascii")
+        f"q /PDFiuOpacity gs {red} {green} {blue} RG {fill_color} {stroke} w 1 J 1 j {dash} {path} {'B' if filled else 'S'} Q".encode("ascii")
     )
     graphics_state = DictionaryObject({NameObject("/Type"): NameObject("/ExtGState"),
                                        NameObject("/CA"): FloatObject(opacity),
                                        NameObject("/ca"): FloatObject(opacity * 0.24)})
-    resources = DictionaryObject({NameObject("/ExtGState"): DictionaryObject({NameObject("/FolioOpacity"): graphics_state})})
+    resources = DictionaryObject({NameObject("/ExtGState"): DictionaryObject({NameObject("/PDFiuOpacity"): graphics_state})})
     appearance.update({NameObject("/Type"): NameObject("/XObject"), NameObject("/Subtype"): NameObject("/Form"),
                        NameObject("/BBox"): RectangleObject((0, 0, width, height)),
                        NameObject("/Resources"): resources})
@@ -1801,7 +1801,7 @@ def batch_header_footer(sources, directory, expression, settings, progress):
             suffix += 1
         reserved.add(name.casefold())
         jobs.append((source, indices, name))
-    with TemporaryDirectory(prefix=".folio-lote-", dir=directory) as staging:
+    with TemporaryDirectory(prefix=".pdfiu-lote-", dir=directory) as staging:
         staging = Path(staging)
         for index, (source, indices, name) in enumerate(jobs, 1):
             progress(index, len(jobs))

@@ -1,6 +1,6 @@
-#define BuildRoot GetEnv("FOLIO_BUILD_DIR")
+#define BuildRoot GetEnv("PDFIU_BUILD_DIR")
 #if BuildRoot == ""
-  #error Define FOLIO_BUILD_DIR first.
+  #error Define PDFIU_BUILD_DIR first.
 #endif
 #include AddBackslash(BuildRoot) + "release.iss"
 #define ShellClsid "10230B99-2AD4-4607-939D-7085BAFB4A96"
@@ -112,7 +112,7 @@ const
   PDFiuStillOpen = 10;
 
 var
-  ReplacingFolio: Boolean;
+  ReplacingLegacyVersion: Boolean;
 
 function ClosePDFiu(const Helper, Arguments: String; Silent: Boolean): String;
 var
@@ -176,12 +176,12 @@ var
   PreviousName, PreviousDir: String;
 begin
   if CurStep = ssInstall then
-    ReplacingFolio :=
+    ReplacingLegacyVersion :=
       RegQueryStringValue(HKCU, PreviousAppKey,
         'DisplayName', PreviousName) and (PreviousName = 'Folio PDF') and
       RegQueryStringValue(HKCU, PreviousAppKey,
         'Inno Setup: App Path', PreviousDir) and (CompareText(PreviousDir, ExpandConstant('{app}')) = 0);
-  if (CurStep = ssPostInstall) and ReplacingFolio then
+  if (CurStep = ssPostInstall) and ReplacingLegacyVersion then
   begin
     DeleteFile(ExpandConstant('{app}\Folio PDF.exe'));
     DeleteFile(ExpandConstant('{userprograms}\Folio PDF\Folio PDF.lnk'));

@@ -319,7 +319,7 @@ def sign_pages(source, destination, positions, signer, progress):
         progress(1, 1)
         sign_with(source, destination, page, box, signer)
         return
-    with TemporaryDirectory(prefix=".folio-paginas-", dir=destination.parent) as staging:
+    with TemporaryDirectory(prefix=".pdfiu-paginas-", dir=destination.parent) as staging:
         current = source
         staging = Path(staging)
         for step, (page, box) in enumerate(positions.items(), 1):
@@ -392,7 +392,7 @@ def sign_batch(placements, directory, progress, *, names=None, **credentials):
     total = sum(len(positions) for positions in documents.values())
     completed = 0
     reserved = {entry.name.casefold() for entry in directory.iterdir()}
-    with TemporaryDirectory(prefix=".folio-firmas-", dir=directory) as staging:
+    with TemporaryDirectory(prefix=".pdfiu-firmas-", dir=directory) as staging:
         prepared = []
         for source, positions in documents.items():
             display_name = (names or {}).get(str(source), source.name)

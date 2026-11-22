@@ -14,7 +14,7 @@ import os
 import sys
 
 ROOT = Path(__file__).resolve().parent
-RUNTIME = Path(os.environ.get("FOLIO_PDF_RUNTIME", ROOT / "runtime"))
+RUNTIME = Path(os.environ.get("PDFIU_RUNTIME", ROOT / "runtime"))
 WINDOWS_BUNDLE = sys.platform == "win32" and getattr(sys, "frozen", False)
 if (RUNTIME / "deps").is_dir():
     sys.path.insert(0, str(RUNTIME / "deps"))
@@ -37,7 +37,7 @@ from pdf_ops import (
     signature_boxes, signature_plan, signature_value, signature_widgets, surface_records, text_block_at, unlock_pdf,
     validate_signature_box, workspace_batch_copies,
 )
-from folio_ui import HeaderEditor, PageNavigator, PanelRail, SEARCH_EXCERPT_ROLE, STYLE, SearchResultDelegate, TourSpotlight, brand_icon, icon, signature_details_html, startup_screen, text_line_boxes
+from pdfiu_ui import HeaderEditor, PageNavigator, PanelRail, SEARCH_EXCERPT_ROLE, STYLE, SearchResultDelegate, TourSpotlight, brand_icon, icon, signature_details_html, startup_screen, text_line_boxes
 from plan_tools import inspect_document, layer_list, layer_preview, measured_value, prepare_recipe
 from release_info import APP_NAME, APP_VERSION, latest_release, update_channel
 from document_export import export_document, markdown_from_pdf
@@ -2033,7 +2033,7 @@ class WorkspaceList(QListWidget):
             self.open_requested.emit(item)
 
 
-class Folio(QMainWindow):
+class PDFiu(QMainWindow):
     secondary_windows = set()
     compact_width = 1050
 
@@ -2060,8 +2060,15 @@ class Folio(QMainWindow):
         else:
             self.temp = TemporaryDirectory(prefix="pdfiu-", ignore_cleanup_errors=True)
             self.preferences = QSettings(
-                QSettings.Format.IniFormat, QSettings.Scope.UserScope, "Folio PDF", "Folio PDF"
+                QSettings.Format.IniFormat, QSettings.Scope.UserScope, APP_NAME, APP_NAME
             )
+            if not Path(self.preferences.fileName()).is_file():
+                old_preferences = QSettings(
+                    QSettings.Format.IniFormat, QSettings.Scope.UserScope, "Folio PDF", "Folio PDF"
+                )
+                for key in old_preferences.allKeys():
+                    self.preferences.setValue(key, old_preferences.value(key))
+                self.preferences.sync()
         self.scratch = Path(self.temp.name)
         self.document_views = {}
         self.recovery = RecoveryJournal(self.scratch)
@@ -3414,7 +3421,7 @@ class Folio(QMainWindow):
         self.show_welcome_guide(guided=False)
 
     def show_welcome_guide(self, *, guided):
-        window = Folio()
+        window = PDFiu()
         try:
             folder = window.scratch / "visita"
             folder.mkdir()
@@ -4779,7 +4786,7 @@ class Folio(QMainWindow):
                         self.form_kind = "hybrid" if has_fields or self.current_fields else "xfa"
                         label = (tr("Formulario XFA híbrido · Haz clic en un campo para preparar una copia editable.")
                                  if self.form_kind == "hybrid" else
-                                 tr("Formulario XFA · Esta versión de Folio necesita campos AcroForm para editarlo."))
+                                 tr("Formulario XFA · Esta versión de PDFiu necesita campos AcroForm para editarlo."))
                     elif has_signed_fields(fields):
                         label = tr("Formulario firmado · Edita sobre una copia")
                     else:
@@ -4788,7 +4795,7 @@ class Folio(QMainWindow):
                         label = tr("Formulario PDF · Esta página no tiene campos editables visibles.")
         except Exception:
             self.form_kind = "unsupported"
-            label = tr("Formulario PDF · Folio no pudo leer la definición de los campos.")
+            label = tr("Formulario PDF · PDFiu no pudo leer la definición de los campos.")
         self.form_label.setText(label)
         self.form_strip.setVisible(bool(label))
         self.tint_btn.setVisible(bool(self.current_fields))
@@ -5118,7 +5125,7 @@ class Folio(QMainWindow):
         window.activateWindow()
 
     def new_window(self):
-        self.show_new_window(Folio())
+        self.show_new_window(PDFiu())
 
     def open_secondary_view(self):
         if self.work_key is None or self.job is not None:
@@ -5196,7 +5203,7 @@ class Folio(QMainWindow):
         if self.work_key is None:
             return
         self.view.finish_inline()
-        window = Folio()
+        window = PDFiu()
 
         def relocate(state):
             if state.path.parent != self.scratch:
@@ -6110,7 +6117,7 @@ class Folio(QMainWindow):
         dpi.setRange(96, 1200)
         dpi.setValue(150)
         dpi.setSuffix(tr(" ppp"))
-        dpi.setToolTip(tr("Densidad mínima en la página para las imágenes que Folio remuestrea"))
+        dpi.setToolTip(tr("Densidad mínima en la página para las imágenes que PDFiu remuestrea"))
         layout.addRow(tr("Perfil"), profile)
         layout.addRow(description)
         layout.addRow(tr("Calidad JPEG"), quality)
@@ -6228,9 +6235,9 @@ class Folio(QMainWindow):
         if difference > 0:
             comparison = tr("Ahorro del {0:.1%}.").format(ratio)
         elif resized == 0:
-            comparison = (tr("El perfil no produjo un archivo más pequeño. No se redujo ninguna imagen: quizá ya cumple el límite o usa un formato que Folio conserva."))
+            comparison = (tr("El perfil no produjo un archivo más pequeño. No se redujo ninguna imagen: quizá ya cumple el límite o usa un formato que PDFiu conserva."))
         else:
-            comparison = (tr("Se redujeron algunas imágenes, pero el ahorro no compensó el tamaño del resto del PDF. Folio descartó la copia de prueba."))
+            comparison = (tr("Se redujeron algunas imágenes, pero el ahorro no compensó el tamaño del resto del PDF. PDFiu descartó la copia de prueba."))
         dialog.setInformativeText(tr("{0}\nImágenes optimizadas en la prueba: {1} · Redimensionadas: {2}").format(comparison, images, resized))
         save = dialog.addButton(tr("Guardar copia…"), QMessageBox.ButtonRole.AcceptRole)
         preview = dialog.addButton(tr("Comparar al 100 %…"), QMessageBox.ButtonRole.ActionRole) if difference > 0 else None
@@ -7302,9 +7309,9 @@ class Folio(QMainWindow):
         if not has_xfa(reader_for(self.path)):
             return True
         if self.form_kind == "xfa":
-            self.note(tr("Este PDF usa XFA y no tiene campos AcroForm que Folio pueda editar."))
+            self.note(tr("Este PDF usa XFA y no tiene campos AcroForm que PDFiu pueda editar."))
             return False
-        question = (tr("Este formulario incluye XFA y Folio puede intentar usar sus campos AcroForm. La copia conserva los campos compatibles y pierde la lógica dinámica XFA. Conserva el original si un trámite exige el formato XFA. ¿Preparar la copia?"))
+        question = (tr("Este formulario incluye XFA y PDFiu puede intentar usar sus campos AcroForm. La copia conserva los campos compatibles y pierde la lógica dinámica XFA. Conserva el original si un trámite exige el formato XFA. ¿Preparar la copia?"))
         if QMessageBox.question(self, tr("Formulario híbrido"), question) != QMessageBox.StandardButton.Yes:
             return False
         original = self.saved_path or self.path
@@ -7426,7 +7433,7 @@ class Folio(QMainWindow):
                 scope = QMessageBox(self)
                 scope.setWindowTitle(tr("Páginas a firmar"))
                 scope.setText(tr("¿Dónde quieres aplicar el recuadro que dibujaste en la página {0}?").format(page + 1))
-                scope.setInformativeText(tr("Folio crea una firma digital por página. Windows puede pedir el PIN más de una vez."))
+                scope.setInformativeText(tr("PDFiu crea una firma digital por página. Windows puede pedir el PIN más de una vez."))
                 current = scope.addButton(tr("Solo esta página"), QMessageBox.ButtonRole.AcceptRole)
                 every = scope.addButton(tr("Las {0} páginas").format(len(reader.pages)), QMessageBox.ButtonRole.ActionRole)
                 scope.addButton(QMessageBox.StandardButton.Cancel)
@@ -7578,7 +7585,7 @@ def main():
         create_mutex.argtypes = (ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR)
         create_mutex.restype = wintypes.HANDLE
         # Inno Setup shares this mutex with older installations.
-        if not create_mutex(None, False, r"Local\FolioPDF.Setup.AA1A6AE8"):
+        if not create_mutex(None, False, r"Local\PDFiu.Setup.AA1A6AE8"):
             raise ctypes.WinError(ctypes.get_last_error())
 
     application = QApplication(sys.argv)
@@ -7587,7 +7594,7 @@ def main():
     application.setWindowIcon(brand_icon())
     application.setStyle("Fusion")
     application.setStyleSheet(STYLE)
-    window = Folio(show_startup=True)
+    window = PDFiu(show_startup=True)
     window.show()
     window.startup.finish(window)
     window.startup = None

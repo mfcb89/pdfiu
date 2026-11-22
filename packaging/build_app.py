@@ -20,7 +20,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tessdata", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--bundle-id", default="local.foliopdf.desktop")
+    parser.add_argument("--bundle-id", default="local.pdfiu.desktop")
     parser.add_argument("--arch", choices=("x86_64", "arm64", "universal2"))
     parser.add_argument("--updates-url", help="Dirección HTTPS del canal de versiones de PDFiu.")
     parser.add_argument("--dry-run", action="store_true")
@@ -58,6 +58,7 @@ def main():
     for source, destination in (
         (ROOT / "assets", "assets"),
         (ROOT / "LEEME.md", "."),
+        (ROOT / "USER_GUIDE.en.md", "."),
         (ROOT / "LICENSE", "."),
         (ROOT / "THIRD_PARTY_NOTICES.md", "."),
         (notices, "third-party"),
@@ -73,7 +74,7 @@ def main():
     if args.updates_url:
         channel = output / "update-channel.txt"
         command.extend(("--add-data", f"{channel}:."))
-    command.append(str(ROOT / "folio.py"))
+    command.append(str(ROOT / "pdfiu.py"))
     if args.dry_run:
         for part in command:
             print(shlex.quote(part))
