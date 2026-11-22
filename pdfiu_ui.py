@@ -5,7 +5,7 @@ from html import escape
 from pathlib import Path
 
 from PySide6.QtCore import QByteArray, QEvent, QPoint, QPointF, QRect, QRectF, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPainterPath, QPen, QPixmap, QTextCharFormat, QTextLayout, QTextOption
+from PySide6.QtGui import QColor, QFont, QGuiApplication, QIcon, QPainter, QPainterPath, QPalette, QPen, QPixmap, QTextCharFormat, QTextLayout, QTextOption
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import QComboBox, QFrame, QHBoxLayout, QPushButton, QSplashScreen, QStyle, QStyledItemDelegate, QStyleOptionViewItem, QTextEdit, QVBoxLayout, QWidget
 
@@ -83,6 +83,7 @@ ICON_NAMES = {
 INK = "#182a3d"
 MINT = "#97d7c3"
 SEARCH_EXCERPT_ROLE = Qt.ItemDataRole.UserRole + 1
+ANNOTATION_CARD_ROLE = Qt.ItemDataRole.UserRole + 4
 
 
 def signature_details_html(details):
@@ -148,6 +149,10 @@ def signature_details_html(details):
 
 class SearchResultDelegate(QStyledItemDelegate):
     def paint(self, painter, option, index):
+        card = index.data(ANNOTATION_CARD_ROLE)
+        if card is not None:
+            self._paint_annotation_card(painter, option, card)
+            return
         excerpt = index.data(SEARCH_EXCERPT_ROLE)
         if excerpt is None:
             super().paint(painter, option, index)
@@ -162,7 +167,7 @@ class SearchResultDelegate(QStyledItemDelegate):
         painter.save()
         painter.setClipRect(option.rect)
         painter.setFont(page_font)
-        painter.setPen(QColor("#516472"))
+        painter.setPen(option.palette.placeholderText().color())
         x, y = option.rect.x() + 10, option.rect.y() + 8
         painter.drawText(QRectF(x, y, option.rect.width() - 20, 15), index.data(Qt.ItemDataRole.UserRole + 2))
         before, match, after = excerpt
@@ -174,9 +179,9 @@ class SearchResultDelegate(QStyledItemDelegate):
         bold.start = len(before.encode("utf-16-le")) // 2
         bold.length = len(match.encode("utf-16-le")) // 2
         bold.format.setFontWeight(QFont.Weight.Bold)
-        bold.format.setForeground(QColor(INK))
+        bold.format.setForeground(option.palette.text().color())
         layout.setFormats([bold])
-        painter.setPen(QColor("#435763"))
+        painter.setPen(option.palette.text().color())
         layout.beginLayout()
         height = 0
         while (line := layout.createLine()).isValid():
@@ -187,7 +192,69 @@ class SearchResultDelegate(QStyledItemDelegate):
         layout.draw(painter, QPointF(x, y + 18))
         painter.restore()
 
+    def _paint_annotation_card(self, painter, option, card):
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        rect = option.rect.adjusted(4, 3, -4, -3)
+        selected = bool(option.state & QStyle.StateFlag.State_Selected)
+        hovered = bool(option.state & QStyle.StateFlag.State_MouseOver)
+        accent = QColor(card.get("color", "#3b82f6"))
+        base = option.palette.base().color()
+        is_dark = base.lightness() < 128
+        if selected:
+            fill = QColor("#1f3a56") if is_dark else QColor("#eef5fc")
+            border = QColor("#60a5fa") if is_dark else QColor("#6fa3d8")
+        elif hovered:
+            fill = QColor("#242b35") if is_dark else QColor("#f7fafd")
+            border = QColor("#3f4a59") if is_dark else QColor("#c8d6e5")
+        else:
+            fill = QColor("#1d232b") if is_dark else QColor("#ffffff")
+            border = QColor("#2f3846") if is_dark else QColor("#dce4ee")
+        painter.setPen(QPen(border, 1))
+        painter.setBrush(fill)
+        painter.drawRoundedRect(rect, 8, 8)
+
+        # Colored left accent bar
+        bar_rect = QRectF(rect.x() + 1, rect.y() + 6, 3.5, max(8, rect.height() - 12))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(accent)
+        painter.drawRoundedRect(bar_rect, 2, 2)
+
+        x = rect.x() + 12
+        y = rect.y() + 7
+        width = max(40, rect.width() - 20)
+
+        meta_font = QFont(option.font)
+        meta_font.setPixelSize(11)
+        meta_font.setWeight(QFont.Weight.DemiBold)
+        painter.setFont(meta_font)
+        painter.setPen(accent)
+        kind_text = card.get("kind", "")
+        page_text = card.get("page_label", "")
+        painter.drawText(QRectF(x, y, width, 16), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, kind_text)
+        painter.setPen(QColor("#94a3b8") if is_dark else QColor("#64748b"))
+        painter.drawText(QRectF(x, y, width, 16), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, page_text)
+
+        body = card.get("text", "").strip()
+        body_font = QFont(option.font)
+        body_font.setPixelSize(12)
+        if not body:
+            body = card.get("empty_label", "")
+            body_font.setItalic(True)
+            painter.setPen(QColor("#8291a3") if is_dark else QColor("#7b8b9c"))
+        else:
+            painter.setPen(QColor("#e2e8f0") if is_dark else QColor("#1e293b"))
+        painter.setFont(body_font)
+        body_rect = QRectF(x, y + 20, width, max(18, rect.height() - 32))
+        painter.drawText(body_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop | Qt.TextFlag.TextWordWrap, body)
+        painter.restore()
+
     def sizeHint(self, option, index):
+        card = index.data(ANNOTATION_CARD_ROLE)
+        if card is not None:
+            body = card.get("text", "").strip()
+            lines = 1 if not body else min(4, max(1, (len(body) // 34) + 1))
+            return QSize(0, 38 + lines * (option.fontMetrics.lineSpacing() + 1))
         if index.data(SEARCH_EXCERPT_ROLE) is None:
             return super().sizeHint(option, index)
         return QSize(0, 34 + 4 * option.fontMetrics.lineSpacing())
@@ -661,3 +728,167 @@ QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
 QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
 """
 STYLE += f'QComboBox::down-arrow {{ image: url("{(ICON_PATH / "chevron_down_16_regular.svg").as_posix()}"); width: 14px; height: 14px; }}'
+
+
+DARK_STYLE = """
+QMainWindow, QDialog, QWidget { background: #161b22; color: #e6edf3; font-family: "Segoe UI", "Helvetica Neue", Arial; font-size: 13px; }
+QFrame#topbar, QFrame#readerFooter, QFrame#statusBar { background: #1c222b; border-bottom: 1px solid #2b3440; }
+QFrame#readerFooter, QFrame#statusBar { border-top: 1px solid #2b3440; border-bottom: 0; }
+QFrame#rail { background: #181e26; border-right: 1px solid #2b3440; }
+QFrame#sidebar, QFrame#navigationOverview, QWidget#workspaceFiles, QWidget#workspaceNavigation { background: #1a2028; }
+QFrame#navigationOverview { border-bottom: 1px solid #2b3440; }
+QWidget#workspaceNavigation { border-right: 1px solid #2b3440; }
+QFrame#toolPanel, QWidget#toolRow { background: #1c222b; }
+QFrame#toolPanel { border-left: 1px solid #2b3440; }
+QFrame#toolCategories { background: #161b22; border: 1px solid #2b3440; border-radius: 10px; }
+QFrame#formStrip, QFrame#signatureStrip { background: #1b2a38; border-bottom: 1px solid #2b4257; }
+QFrame#signatureStrip QLabel { color: #7dd3fc; font-weight: 600; }
+QFrame#tourStrip { background: #172b26; border-bottom: 1px solid #26483e; }
+QLabel#tourTitle { color: #6ee7b7; font-weight: 700; }
+QFrame#welcomeOffer { border-top: 1px solid #2b3440; }
+QFrame#shapePanel { background: #1d2530; border: 1px solid #2b3440; border-radius: 8px; }
+QFrame#shapePanel QCheckBox { background: transparent; }
+QLabel { background: transparent; color: #e6edf3; }
+QLabel#brand { font-size: 18px; font-weight: 700; color: #f0f6fc; }
+QFrame#toolbarDivider { background: #2b3440; }
+QLabel#chapter { font-size: 13px; font-weight: 650; color: #c9d5e2; }
+QLabel#fileTitle { font-weight: 600; color: #f0f6fc; }
+QLabel#fileState { color: #fbbf24; font-size: 12px; }
+QFrame#redactionStrip { background: #332614; border-bottom: 1px solid #6b4c1d; }
+QFrame#redactionStrip QLabel { color: #fde68a; background: transparent; }
+QLabel#muted { color: #8b9bb0; }
+QTextBrowser#signatureDetails { background: #161b22; border: 1px solid #2b3440; border-radius: 8px; color: #e6edf3; }
+QLabel#panelLabel { color: #9fb0c4; font-size: 12px; font-weight: 600; }
+QLabel#toolHeading, QLabel#resultHeading { color: #f0f6fc; font-size: 16px; font-weight: 650; }
+QLabel#toolScope { color: #6ee7b7; background: #17302a; padding: 7px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; }
+QLabel#emptyHeading { font-size: 29px; font-weight: 600; color: #f0f6fc; }
+QLabel#emptyIcon { background: #1a312b; border-radius: 15px; }
+QPushButton { padding: 7px 11px; min-height: 17px; border: 1px solid #303a47; border-radius: 7px; background: #222a35; color: #e6edf3; }
+QPushButton:hover { background: #2b3544; border-color: #3f4d60; }
+QPushButton:pressed { background: #1f3c36; }
+QPushButton:focus, QLineEdit:focus, QComboBox:focus, QSpinBox:focus { border: 1px solid #4fb39d; }
+QPushButton:disabled { color: #647285; background: #1b2028; border-color: #262e38; }
+QPushButton#primary { background: #2f7d6d; color: #ffffff; border-color: #2f7d6d; font-weight: 600; }
+QPushButton#primary:hover { background: #389380; border-color: #389380; }
+QPushButton#primary:disabled { color: #6b7c8f; background: #212a34; border-color: #2b3440; }
+QPushButton:checked { background: #1d3c35; border-color: #3c8675; color: #8ff0d4; }
+QPushButton[role="tool"] { text-align: left; padding: 9px 9px; border: 1px solid transparent; background: transparent; color: #dde6f0; }
+QPushButton[role="tool"]:hover { background: #252e3a; }
+QPushButton[role="tool"]:focus { border-color: #4fb39d; }
+QPushButton[role="tool"]:checked { background: #1d3c35; color: #8ff0d4; border-color: #327263; }
+QPushButton[role="tool"]:disabled { color: #5b6778; background: transparent; }
+QPushButton[role="tool"][batchTool="true"]:enabled { color: #6ee7b7; font-weight: 600; }
+QPushButton[role="tool"][batchTool="true"]:enabled:hover { background: #1b312c; }
+QPushButton[role="category"], QPushButton[role="icon"] { padding: 0; border: 1px solid transparent; background: transparent; color: #d0dae6; }
+QPushButton[role="category"] { padding: 4px 5px; text-align: left; font-size: 12px; }
+QPushButton[role="category"]:hover, QPushButton[role="icon"]:hover { background: #252e3a; }
+QPushButton[role="category"]:focus, QPushButton[role="icon"]:focus { border-color: #4fb39d; }
+QPushButton[role="category"]:checked, QPushButton[role="icon"]:checked { background: #1d3c35; border-color: #327263; }
+QPushButton[role="category"]:checked { color: #8ff0d4; font-weight: 600; }
+QPushButton[role="flat"] { text-align: left; padding: 7px 8px; background: transparent; border: 1px solid transparent; color: #dde6f0; }
+QPushButton[role="flat"]:hover { background: #252e3a; }
+QListWidget, QTreeWidget { background: #161b22; border: 1px solid #2b3440; border-radius: 7px; outline: none; color: #e6edf3; }
+QListWidget#files, QListWidget#pageList { background: #1a2028; border: 0; }
+QListWidget#files::indicator { width: 15px; height: 15px; }
+QFrame#pageInsertLine { background: #4fb39d; border-radius: 1px; }
+QListWidget::item { padding: 8px; border-radius: 7px; margin: 2px 3px; }
+QListWidget::item:selected, QTreeWidget::item:selected { background: #1d3c35; color: #8ff0d4; }
+QListWidget::item:hover:!selected { background: #222a35; }
+QGraphicsView { border: 0; background: #101419; }
+QWidget#emptyState { background: #12171d; }
+QFrame#emptyCard { background: #1c222b; border: 1px solid #2b3440; border-radius: 18px; }
+QLineEdit, QTextEdit, QComboBox, QSpinBox { background: #141920; color: #e6edf3; border: 1px solid #303a47; padding: 5px; border-radius: 6px; }
+QComboBox { padding-right: 25px; }
+QComboBox::drop-down { border: 0; width: 24px; subcontrol-origin: padding; subcontrol-position: top right; }
+QLineEdit#zoomLevel { background: #202833; border-color: transparent; padding: 4px 5px; color: #d8e2ee; }
+QLineEdit#zoomLevel:focus { border-color: #4fb39d; }
+QPushButton[role="railSection"], QPushButton[role="readerButton"], QPushButton[role="readerSize"] {
+    padding: 0; min-height: 0; border: 1px solid transparent; border-radius: 5px; background: transparent; color: #d0dae6;
+}
+QPushButton[role="railSection"]:hover, QPushButton[role="readerButton"]:hover, QPushButton[role="readerSize"]:hover {
+    background: #252e3a;
+}
+QPushButton[role="railSection"]:checked { background: #1d3c35; }
+QPushButton[role="readerSize"]::menu-indicator { image: none; width: 0; height: 0; }
+QLabel#readerPageTotal { color: #8b9bb0; font-size: 11px; padding-bottom: 3px; }
+QLineEdit#readerPageNumber, QLineEdit#zoomLevel {
+    padding: 0; color: #f0f6fc; font-size: 12px; font-weight: 600;
+    background: transparent; border: 1px solid transparent; border-radius: 4px;
+}
+QLineEdit#readerPageNumber { background: #141920; border-color: #303a47; }
+QLineEdit#readerPageNumber:hover, QLineEdit#zoomLevel:hover { background: #1d242e; border-color: #465466; }
+QLineEdit#readerPageNumber:focus, QLineEdit#zoomLevel:focus { background: #141920; border-color: #4fb39d; }
+QWidget#navigationPanel { background: #1c222b; border-right: 1px solid #2b3440; }
+QTabWidget#workspaceNavigation, QTabWidget#workspaceNavigation QFrame#sidebar,
+QTabWidget#workspaceNavigation QWidget#workspaceFiles, QTabWidget#workspaceNavigation QWidget#sidebar {
+    background: #1c222b;
+}
+QTabWidget#workspaceNavigation QLabel#panelLabel { color: #c9d5e2; font-size: 14px; font-weight: 600; }
+QTabWidget#workspaceNavigation QListWidget, QTabWidget#workspaceNavigation QTreeWidget {
+    background: #1c222b; border: 0; border-radius: 0;
+}
+QTabWidget#workspaceNavigation QListWidget::item, QTabWidget#workspaceNavigation QTreeWidget::item {
+    padding-left: 5px; padding-right: 5px; border-radius: 5px;
+}
+QTabWidget#workspaceNavigation QListWidget::item:selected, QTabWidget#workspaceNavigation QTreeWidget::item:selected {
+    background: #1d3c35; color: #8ff0d4;
+}
+QProgressBar { max-height: 7px; background: #242d39; border: 0; border-radius: 3px; }
+QProgressBar::chunk { background: #4fb39d; border-radius: 3px; }
+QTabBar { background: transparent; }
+QTabBar::tab { padding: 6px 10px; margin: 4px 2px 3px; border-radius: 6px; color: #8b9bb0; }
+QTabBar::tab:selected { background: #1d3c35; color: #8ff0d4; font-weight: 600; }
+QTabBar::tab:hover:!selected { background: #222a35; }
+QTabWidget::pane { border: 0; }
+QDockWidget::title { background: #1f2631; padding: 7px; color: #e6edf3; }
+QMenuBar { background: #1c222b; color: #e6edf3; border-bottom: 1px solid #2b3440; padding: 2px 8px; }
+QMenuBar::item { background: transparent; padding: 5px 9px; }
+QMenuBar::item:selected { background: #1d3c35; color: #8ff0d4; }
+QMenu { background: #1c222b; color: #e6edf3; border: 1px solid #303a47; border-radius: 8px; padding: 5px; }
+QMenu::item { padding: 7px 23px 7px 12px; border: 1px solid transparent; border-radius: 5px; }
+QMenu::item:selected { background: #1d3c35; color: #8ff0d4; border-color: #327263; }
+QMenu::item:disabled { color: #647285; }
+QMenu::separator { background: #2b3440; height: 1px; margin: 4px 6px; }
+QComboBox QAbstractItemView { background: #1c222b; color: #e6edf3; border: 1px solid #303a47; padding: 4px;
+                            outline: none; selection-background-color: #1d3c35; selection-color: #8ff0d4; }
+QComboBox QAbstractItemView::item { min-height: 23px; padding: 3px 6px; }
+QToolTip { background: #0f141a; color: #f0f6fc; border: 1px solid #303a47; padding: 6px; }
+QScrollBar:vertical { background: transparent; width: 10px; margin: 2px; }
+QScrollBar::handle:vertical { background: #3b4656; min-height: 24px; border-radius: 3px; }
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
+"""
+
+
+def resolve_theme(preference):
+    if preference in ("light", "dark"):
+        return preference
+    try:
+        scheme = QGuiApplication.styleHints().colorScheme()
+        if scheme == Qt.ColorScheme.Dark:
+            return "dark"
+    except AttributeError:
+        pass
+    return "light"
+
+
+def apply_theme(application, preference="system"):
+    mode = resolve_theme(preference)
+    palette = QPalette()
+    if mode == "dark":
+        palette.setColor(QPalette.ColorRole.Window, QColor("#161b22"))
+        palette.setColor(QPalette.ColorRole.WindowText, QColor("#e6edf3"))
+        palette.setColor(QPalette.ColorRole.Base, QColor("#141920"))
+        palette.setColor(QPalette.ColorRole.AlternateBase, QColor("#1c222b"))
+        palette.setColor(QPalette.ColorRole.Text, QColor("#e6edf3"))
+        palette.setColor(QPalette.ColorRole.Button, QColor("#222a35"))
+        palette.setColor(QPalette.ColorRole.ButtonText, QColor("#e6edf3"))
+        palette.setColor(QPalette.ColorRole.Highlight, QColor("#1d3c35"))
+        palette.setColor(QPalette.ColorRole.HighlightedText, QColor("#8ff0d4"))
+        palette.setColor(QPalette.ColorRole.PlaceholderText, QColor("#8b9bb0"))
+        application.setPalette(palette)
+        application.setStyleSheet(DARK_STYLE)
+    else:
+        application.setPalette(application.style().standardPalette())
+        application.setStyleSheet(STYLE)
+    return mode

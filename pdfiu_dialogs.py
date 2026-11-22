@@ -3,6 +3,7 @@
 import base64
 from html import escape
 from pathlib import Path
+import unicodedata
 
 from PySide6.QtCore import QEvent, QSignalBlocker, Qt, QTimer
 from PySide6.QtGui import QColor
@@ -791,3 +792,77 @@ class BatchDialog(QDialog):
 
     def placements(self):
         return [(source, page, box) for source in self.sources for page, box in self.plans[source].items()]
+
+
+def _fold_text(value):
+    normalized = unicodedata.normalize("NFD", value.casefold())
+    return "".join(ch for ch in normalized if unicodedata.category(ch) != "Mn")
+
+
+class CommandPaletteDialog(QDialog):
+    def __init__(self, entries, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(tr("Paleta de comandos"))
+        self.resize(520, 420)
+        self.entries = entries
+        self.chosen = None
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(10)
+
+        self.search = QLineEdit()
+        self.search.setPlaceholderText(tr("Buscar comando o herramienta…"))
+        self.search.setClearButtonEnabled(True)
+        self.search.textChanged.connect(self.refresh)
+        self.search.installEventFilter(self)
+        layout.addWidget(self.search)
+
+        self.results = QListWidget()
+        self.results.setAlternatingRowColors(False)
+        self.results.itemActivated.connect(self.accept_selected)
+        layout.addWidget(self.results, 1)
+
+        hint = QLabel(tr("Pulsa Enter para ejecutar o Esc para cerrar."), objectName="muted")
+        layout.addWidget(hint)
+
+        self.refresh()
+        self.search.setFocus()
+
+    def eventFilter(self, watched, event):
+        if watched is self.search and event.type() == QEvent.Type.KeyPress:
+            key = event.key()
+            if key in (Qt.Key.Key_Down, Qt.Key.Key_Up):
+                count = self.results.count()
+                if count:
+                    row = self.results.currentRow()
+                    step = 1 if key == Qt.Key.Key_Down else -1
+                    self.results.setCurrentRow((row + step) % count)
+                return True
+            if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                self.accept_selected()
+                return True
+        return super().eventFilter(watched, event)
+
+    def refresh(self):
+        terms = _fold_text(self.search.text().strip()).split()
+        self.results.clear()
+        for label, group, shortcut, callback in self.entries:
+            haystack = _fold_text(f"{label} {group} {shortcut}")
+            if any(term not in haystack for term in terms):
+                continue
+            display = f"{label}  —  {group}" if group else label
+            if shortcut:
+                display = f"{display}  ({shortcut})"
+            item = QListWidgetItem(display)
+            item.setData(Qt.ItemDataRole.UserRole, callback)
+            self.results.addItem(item)
+        if self.results.count():
+            self.results.setCurrentRow(0)
+
+    def accept_selected(self, item=None):
+        target = item or self.results.currentItem()
+        if target is None:
+            return
+        self.chosen = target.data(Qt.ItemDataRole.UserRole)
+        self.accept()

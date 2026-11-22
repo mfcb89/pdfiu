@@ -38,7 +38,7 @@ from pdf_ops import (
     signature_boxes, signature_plan, signature_value, signature_widgets, surface_records, text_block_at, unlock_pdf,
     validate_signature_box, workspace_batch_copies,
 )
-from pdfiu_ui import HeaderEditor, PageNavigator, PanelRail, SEARCH_EXCERPT_ROLE, STYLE, SearchResultDelegate, TourSpotlight, brand_icon, icon, signature_details_html, startup_screen, text_line_boxes
+from pdfiu_ui import ANNOTATION_CARD_ROLE, HeaderEditor, PageNavigator, PanelRail, SEARCH_EXCERPT_ROLE, STYLE, SearchResultDelegate, TourSpotlight, apply_theme, brand_icon, icon, signature_details_html, startup_screen, text_line_boxes
 from plan_tools import inspect_document, layer_list, layer_preview, measured_value, prepare_recipe
 from release_info import APP_NAME, APP_VERSION, latest_release, update_channel
 from document_export import export_document, markdown_from_pdf
@@ -55,7 +55,7 @@ from pdfiu_views import (
     SEARCH_PAGE_COUNT_ROLE, WorkDocument, WorkspaceList, action_menu, as_qimage, button,
     check_cancellation, file_size_label, icon_button, search_result_item,
 )
-from pdfiu_dialogs import BatchDialog, CertificateDialog, CompressionPreview, MergeDialog, RevisionComparison
+from pdfiu_dialogs import BatchDialog, CertificateDialog, CommandPaletteDialog, CompressionPreview, MergeDialog, RevisionComparison
 
 
 class PDFiu(QMainWindow):
@@ -510,6 +510,10 @@ class PDFiu(QMainWindow):
         body.addWidget(viewer_column, 1)
         body.addWidget(self.tools)
         layout.addLayout(body, 1)
+        self.bookmark_filter = QLineEdit()
+        self.bookmark_filter.setPlaceholderText(tr("Filtrar marcadores…"))
+        self.bookmark_filter.setClearButtonEnabled(True)
+        self.bookmark_filter.textChanged.connect(self.filter_bookmarks)
         self.bookmark_tree = QTreeWidget()
         self.bookmark_tree.setHeaderHidden(True)
         self.bookmark_tree.setWordWrap(True)
@@ -518,7 +522,7 @@ class PDFiu(QMainWindow):
         self.bookmark_tree.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.bookmark_tree.setItemDelegate(BookmarkRows(self.bookmark_tree))
         self.bookmark_tree.itemClicked.connect(self.open_bookmark)
-        self.bookmarks_panel = self.navigation_panel("Marcadores", self.bookmark_tree)
+        self.bookmarks_panel = self.navigation_panel("Marcadores", self.bookmark_filter, self.bookmark_tree)
         self.work_list = WorkspaceList(objectName="files")
         self.work_list.setAccessibleName(tr("Archivos de la mesa de trabajo"))
         self.work_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -588,6 +592,18 @@ class PDFiu(QMainWindow):
         self.search_summary = QLabel(tr("Escribe para buscar en el PDF."))
         self.search_summary.setWordWrap(True)
         review_layout.addWidget(self.search_summary)
+        self.comment_filter = QLineEdit()
+        self.comment_filter.setPlaceholderText(tr("Filtrar anotaciones…"))
+        self.comment_filter.setClearButtonEnabled(True)
+        self.comment_filter.textChanged.connect(self.apply_comment_filter)
+        review_layout.addWidget(self.comment_filter)
+        self.comment_kind_filter = QComboBox()
+        self.comment_kind_filter.currentIndexChanged.connect(self.apply_comment_filter)
+        review_layout.addWidget(self.comment_kind_filter)
+        self.comment_summary = QLabel(objectName="muted")
+        self.comment_summary.setWordWrap(True)
+        review_layout.addWidget(self.comment_summary)
+        self.comment_records = []
         self.review_list.currentItemChanged.connect(
             lambda item, previous: self.open_review_result(item) if item and self.review_mode == "search" else None)
         review_layout.addWidget(self.review_list)
@@ -842,6 +858,7 @@ class PDFiu(QMainWindow):
         add(view, tr("Mostrar u ocultar herramientas"), self.toggle_tool_panel)
 
         help_menu = bar.addMenu(tr("A&yuda"))
+        add(help_menu, tr("Paleta de comandos…"), self.open_command_palette, QKeySequence("Ctrl+K"))
         add(help_menu, tr("Visita guiada…"), self.start_tour)
         add(help_menu, tr("Guía de herramientas…"), self.open_welcome_guide, key.HelpContents)
         self.menu_update = add(help_menu, tr("&Buscar actualizaciones…"), self.check_updates)
@@ -1223,6 +1240,12 @@ class PDFiu(QMainWindow):
         auto_updates = QCheckBox(tr("Comprobar actualizaciones al iniciar"))
         auto_updates.setChecked(self.preferences.value("actualizaciones/comprobar_al_iniciar", False, type=bool))
         layout.addRow(tr("Actualizaciones"), auto_updates)
+        theme = QComboBox()
+        for text, code in ((tr("Tema del sistema"), "system"), (tr("Claro"), "light"), (tr("Oscuro"), "dark")):
+            theme.addItem(text, code)
+        old_theme = self.preferences.value("apariencia/tema", "system")
+        theme.setCurrentIndex(max(0, theme.findData(old_theme)))
+        layout.addRow(tr("Tema"), theme)
         language = QComboBox()
         for text, code in ((tr("Idioma del sistema"), "system"), (tr("Español"), "es"), ("English", "en")):
             language.addItem(text, code)
@@ -1244,7 +1267,10 @@ class PDFiu(QMainWindow):
             self.preferences.setValue("vista/ajuste_inicial", zoom.currentData())
             self.preferences.setValue("archivos/recordar_carpeta", remember.isChecked())
             self.preferences.setValue("actualizaciones/comprobar_al_iniciar", auto_updates.isChecked())
+            self.preferences.setValue("apariencia/tema", theme.currentData())
             self.preferences.setValue("idioma/interfaz", language.currentData())
+            if QApplication.instance() is not None:
+                apply_theme(QApplication.instance(), theme.currentData())
             if not remember.isChecked():
                 self.preferences.remove("archivos/ultima_carpeta")
             self.preferences.sync()
@@ -1256,6 +1282,71 @@ class PDFiu(QMainWindow):
         folder.mkdir(parents=True, exist_ok=True)
         if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder))):
             self.error(tr("No se pudo abrir la carpeta de registros."))
+
+    def filter_bookmarks(self, text):
+        query = text.strip().casefold()
+
+        def apply(item):
+            label = item.text(0).casefold()
+            child_match = False
+            for idx in range(item.childCount()):
+                if apply(item.child(idx)):
+                    child_match = True
+            matched = not query or query in label or child_match
+            item.setHidden(not matched)
+            if query and child_match:
+                item.setExpanded(True)
+            return matched
+
+        for idx in range(self.bookmark_tree.topLevelItemCount()):
+            apply(self.bookmark_tree.topLevelItem(idx))
+
+    def collect_palette_commands(self):
+        entries = []
+        seen = set()
+
+        def visit_menu(menu, prefix=""):
+            for action in menu.actions():
+                if action.isSeparator() or not action.isVisible() or not action.isEnabled():
+                    continue
+                label = action.text().replace("&", "").strip()
+                if not label:
+                    continue
+                submenu = action.menu()
+                if submenu is not None:
+                    visit_menu(submenu, f"{prefix} › {label}" if prefix else label)
+                    continue
+                shortcut = action.shortcut().toString(QKeySequence.SequenceFormat.NativeText)
+                key = (label, prefix)
+                if key not in seen:
+                    seen.add(key)
+                    entries.append((label, prefix, shortcut, action.trigger))
+
+        for action in self.menuBar().actions():
+            if action.menu() is not None and action.isVisible():
+                visit_menu(action.menu(), action.text().replace("&", "").strip())
+
+        for control in self.tools.findChildren(QPushButton):
+            if not control.isEnabled():
+                continue
+            label = control.text().replace("&", "").strip()
+            if not label:
+                continue
+            if control.menu() is not None:
+                visit_menu(control.menu(), label)
+                continue
+            if any(existing[0] == label for existing in entries):
+                continue
+            entries.append((label, tr("Herramientas"), "", control.click))
+
+        return entries
+
+    def open_command_palette(self):
+        if self.job is not None:
+            return
+        dialog = CommandPaletteDialog(self.collect_palette_commands(), self)
+        if dialog.exec() and dialog.chosen is not None:
+            dialog.chosen()
 
     def show_about(self):
         dialog = QDialog(self)
@@ -4550,6 +4641,9 @@ class PDFiu(QMainWindow):
         self.search_advanced.setVisible(mode == "search")
         self.search_run_btn.setVisible(mode == "search")
         self.search_summary.setVisible(mode == "search")
+        self.comment_filter.setVisible(mode == "comments")
+        self.comment_kind_filter.setVisible(mode == "comments")
+        self.comment_summary.setVisible(mode == "comments")
         self.delete_comment_btn.setVisible(mode == "comments")
         self.annotation_menu.setVisible(mode == "comments")
         self.review_list.clear()
@@ -4746,16 +4840,71 @@ class PDFiu(QMainWindow):
             return
         self.show_review("comments")
         try:
-            for page, position, kind, text in review_annotations(self.path, password=self.document_password):
-                item = QListWidgetItem(tr("Pág. {0} · {1}").format(page + 1, kind) + (f"\n{text}" if text else ""))
-                item.setData(Qt.ItemDataRole.UserRole, [page, position])
-                self.review_list.addItem(item)
-            self.delete_comment_btn.setEnabled(bool(self.review_list.count()))
-            self.annotation_menu.setEnabled(bool(self.review_list.count()))
-            if not self.review_list.count():
+            self.comment_records = list(review_annotations(self.path, password=self.document_password))
+            kinds = sorted({kind for _, _, kind, _ in self.comment_records})
+            with QSignalBlocker(self.comment_filter):
+                self.comment_filter.clear()
+            with QSignalBlocker(self.comment_kind_filter):
+                self.comment_kind_filter.clear()
+                self.comment_kind_filter.addItem(tr("Todos los tipos"), "")
+                for kind in kinds:
+                    self.comment_kind_filter.addItem(kind, kind)
+            self.apply_comment_filter()
+            if not self.comment_records:
                 self.note(tr("Este PDF no tiene anotaciones de revisión."))
         except Exception as error:
             self.error(error)
+
+    def annotation_accent_color(self, kind):
+        key = kind.lower()
+        if "nota" in key or "note" in key:
+            return "#d97706"
+        if "resalt" in key or "highlight" in key:
+            return "#ca8a04"
+        if "subray" in key or "underline" in key or "tach" in key or "strike" in key:
+            return "#2563eb"
+        if "texto" in key or "text" in key:
+            return "#0d9488"
+        return "#7c3aed"
+
+    def apply_comment_filter(self):
+        if self.review_mode != "comments":
+            return
+        query = self.comment_filter.text().strip().lower()
+        selected_kind = self.comment_kind_filter.currentData() or ""
+        self.review_list.clear()
+        total = len(self.comment_records)
+        shown = 0
+        for page, position, kind, text in self.comment_records:
+            if selected_kind and kind != selected_kind:
+                continue
+            if query and query not in kind.lower() and query not in (text or "").lower() and query not in str(page + 1):
+                continue
+            item = QListWidgetItem(tr("Pág. {0} · {1}").format(page + 1, kind))
+            item.setData(Qt.ItemDataRole.UserRole, [page, position])
+            item.setData(
+                ANNOTATION_CARD_ROLE,
+                {
+                    "page_label": tr("Pág. {0}").format(page + 1),
+                    "kind": kind,
+                    "color": self.annotation_accent_color(kind),
+                    "text": text or "",
+                    "empty_label": tr("Sin texto adicional"),
+                },
+            )
+            if text:
+                item.setToolTip(text)
+            self.review_list.addItem(item)
+            shown += 1
+        if not total:
+            self.comment_summary.setText(tr("Este PDF no tiene anotaciones de revisión."))
+        elif shown == total:
+            self.comment_summary.setText(tr("{0} anotación(es) en el documento.").format(total))
+        else:
+            self.comment_summary.setText(tr("Mostrando {0} de {1} anotaciones.").format(shown, total))
+        has_items = bool(self.review_list.count())
+        self.delete_comment_btn.setEnabled(has_items)
+        self.annotation_menu.setEnabled(has_items)
 
     def open_review_result(self, item):
         if self.job is not None:
@@ -5762,8 +5911,8 @@ def main():
     application.setApplicationVersion(APP_VERSION)
     application.setWindowIcon(brand_icon())
     application.setStyle("Fusion")
-    application.setStyleSheet(STYLE)
     window = PDFiu(show_startup=True)
+    apply_theme(application, window.preferences.value("apariencia/tema", "system"))
     window.show()
     window.startup.finish(window)
     window.startup = None
