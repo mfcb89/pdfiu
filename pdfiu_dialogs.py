@@ -5,12 +5,12 @@ from html import escape
 from pathlib import Path
 import unicodedata
 
-from PySide6.QtCore import QEvent, QSignalBlocker, QSize, Qt, QTimer
-from PySide6.QtGui import QColor, QIcon, QPixmap, QTransform
+from PySide6.QtCore import QEvent, QMimeData, QPoint, QSignalBlocker, QSize, Qt, QTimer
+from PySide6.QtGui import QColor, QDrag, QIcon, QPixmap, QTransform
 from PySide6.QtWidgets import (
-    QAbstractItemView, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox, QFileDialog, QFormLayout,
-    QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget, QListWidgetItem, QSlider, QSpinBox, QStackedWidget,
-    QVBoxLayout, QWidget,
+    QAbstractItemView, QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox, QFileDialog,
+    QFormLayout, QFrame, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget, QListWidgetItem, QSlider, QSpinBox,
+    QStackedWidget, QVBoxLayout, QWidget,
 )
 
 from pdf_ops import pdfium_reader, project_signature_box, reader_for, render_page, signature_boxes, signature_plan
@@ -919,7 +919,9 @@ class SplitDialog(QDialog):
 
 
 class _PageGrid(QListWidget):
-    """Icon-mode grid that genuinely reorders model rows on drag-and-drop."""
+    """Icon-mode grid with reliable QDrag reordering, live insertion bar, and edge auto-scroll."""
+
+    GRID_MIME = "application/x-pdfiu-grid-pages"
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -928,34 +930,107 @@ class _PageGrid(QListWidget):
         self.setWrapping(True)
         self.setResizeMode(QListWidget.ResizeMode.Adjust)
         self.setMovement(QListWidget.Movement.Static)
-        self.setDragEnabled(True)
         self.setAcceptDrops(True)
-        self.setDropIndicatorShown(True)
-        self.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
-        self.setDefaultDropAction(Qt.DropAction.MoveAction)
         self.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.setSpacing(12)
         self.setWordWrap(True)
+        self._press_pos = None
+        self._insert_bar = QFrame(self.viewport(), objectName="pageInsertLine")
+        self._insert_bar.setFixedWidth(4)
+        self._insert_bar.hide()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._press_pos = event.position().toPoint()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if (
+            self._press_pos is not None
+            and (event.buttons() & Qt.MouseButton.LeftButton)
+            and (event.position().toPoint() - self._press_pos).manhattanLength() >= QApplication.startDragDistance()
+        ):
+            selected = sorted(self.row(item) for item in self.selectedItems())
+            if selected:
+                self._press_pos = None
+                drag = QDrag(self)
+                mime = QMimeData()
+                mime.setData(self.GRID_MIME, ",".join(map(str, selected)).encode("ascii"))
+                drag.setMimeData(mime)
+                icon = self.item(selected[0]).icon()
+                if not icon.isNull():
+                    drag.setPixmap(icon.pixmap(96, 128))
+                drag.exec(Qt.DropAction.MoveAction)
+                self._insert_bar.hide()
+                return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        self._press_pos = None
+        super().mouseReleaseEvent(event)
+
+    def _drop_target(self, pos):
+        item = self.itemAt(pos)
+        if item is None:
+            return self.count(), None, False
+        rect = self.visualItemRect(item)
+        after = pos.x() > rect.center().x()
+        row = self.row(item) + (1 if after else 0)
+        return row, rect, after
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasFormat(self.GRID_MIME):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event):
+        if not event.mimeData().hasFormat(self.GRID_MIME):
+            event.ignore()
+            return
+        pos = event.position().toPoint()
+        # Edge auto-scroll for large documents (hundreds/thousands of pages)
+        margin = 42
+        bar = self.verticalScrollBar()
+        if pos.y() < margin:
+            bar.setValue(bar.value() - 28)
+        elif pos.y() > self.viewport().height() - margin:
+            bar.setValue(bar.value() + 28)
+
+        _, rect, after = self._drop_target(pos)
+        if rect is not None:
+            x = (rect.right() + 4) if after else max(0, rect.left() - 6)
+            self._insert_bar.setGeometry(x, rect.top() + 4, 4, max(24, rect.height() - 8))
+            self._insert_bar.show()
+        else:
+            self._insert_bar.hide()
+        event.acceptProposedAction()
+
+    def dragLeaveEvent(self, event):
+        self._insert_bar.hide()
+        super().dragLeaveEvent(event)
 
     def dropEvent(self, event):
-        if event.source() is not self:
-            super().dropEvent(event)
+        self._insert_bar.hide()
+        if not event.mimeData().hasFormat(self.GRID_MIME):
+            event.ignore()
             return
-        selected_rows = sorted(self.row(item) for item in self.selectedItems())
+        raw = bytes(event.mimeData().data(self.GRID_MIME)).decode("ascii")
+        selected_rows = sorted(int(v) for v in raw.split(",") if v.isdigit())
         if not selected_rows:
             event.ignore()
             return
-        target_item = self.itemAt(event.position().toPoint())
-        target_row = self.row(target_item) if target_item is not None else self.count()
+        target_row, _, _ = self._drop_target(event.position().toPoint())
         moved = [self.takeItem(r) for r in reversed(selected_rows)]
         moved.reverse()
         adjusted_target = target_row - sum(1 for r in selected_rows if r < target_row)
         adjusted_target = max(0, min(adjusted_target, self.count()))
+        self.clearSelection()
         for offset, item in enumerate(moved):
             self.insertItem(adjusted_target + offset, item)
             item.setSelected(True)
         self.setCurrentItem(moved[0])
-        event.accept()
+        event.acceptProposedAction()
 
 
 class OrganizePagesDialog(QDialog):
@@ -971,10 +1046,9 @@ class OrganizePagesDialog(QDialog):
 
         layout = QVBoxLayout(self)
         toolbar = QHBoxLayout()
-        toolbar.addWidget(button("Mover antes", lambda: self.shift_selected(-1), glyph="chevron-left"))
-        toolbar.addWidget(button("Mover después", lambda: self.shift_selected(1), glyph="chevron-right"))
         toolbar.addWidget(button("Girar 90°", self.rotate_selected, glyph="reload-circle"))
         toolbar.addWidget(button("Eliminar", self.delete_selected, glyph="delete-bin"))
+        toolbar.addWidget(button("Mover a posición…", self.move_selected_to_position, glyph="extract"))
         toolbar.addStretch(1)
         toolbar.addWidget(QLabel(tr("Tamaño")))
         self.thumb_slider = QSlider(Qt.Orientation.Horizontal)
@@ -986,13 +1060,14 @@ class OrganizePagesDialog(QDialog):
         layout.addLayout(toolbar)
 
         hint = QLabel(
-            tr("Arrastra las miniaturas sobre otra posición o usa Mover antes / Mover después. Usa Ctrl o Mayús para seleccionar varias."),
+            tr("Arrastra una o varias páginas directamente a su nueva posición. Usa Ctrl o Mayús para selección múltiple."),
             objectName="muted",
         )
         hint.setWordWrap(True)
         layout.addWidget(hint)
 
         self.grid = _PageGrid(self)
+        self.grid.verticalScrollBar().valueChanged.connect(self.schedule_visible_thumbnails)
         layout.addWidget(self.grid, 1)
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
@@ -1002,50 +1077,86 @@ class OrganizePagesDialog(QDialog):
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
 
-        self.populate_thumbnails()
+        self._thumb_timer = QTimer(self, singleShot=True, interval=30)
+        self._thumb_timer.timeout.connect(self.render_visible_thumbnails)
+        self._populate_placeholders()
         self.update_thumb_size(self.thumb_slider.value())
+        QTimer.singleShot(0, self.render_visible_thumbnails)
 
-    def populate_thumbnails(self):
+    def _populate_placeholders(self):
+        placeholder = QPixmap(110, 148)
+        placeholder.fill(QColor("#e8eeec"))
+        placeholder_icon = QIcon(placeholder)
+        for index in range(self.count):
+            item = QListWidgetItem(placeholder_icon, tr("Página {0}").format(index + 1))
+            item.setData(Qt.ItemDataRole.UserRole, index)
+            item.setTextAlignment(Qt.AlignmentFlag.AlignHCenter)
+            self.grid.addItem(item)
+
+    def schedule_visible_thumbnails(self):
+        self._thumb_timer.start()
+
+    def render_visible_thumbnails(self):
+        viewport_rect = self.grid.viewport().rect()
+        pending = []
+        for row in range(self.grid.count()):
+            item = self.grid.item(row)
+            orig = item.data(Qt.ItemDataRole.UserRole)
+            if orig in self.base_pixmaps:
+                continue
+            if self.grid.visualItemRect(item).intersects(viewport_rect.adjusted(0, -300, 0, 300)):
+                pending.append((item, orig))
+        if not pending:
+            return
         with pdfium_reader(self.path, password=self.password) as document:
-            for index in range(self.count):
-                image = render_page(document, index, width=220)
+            for item, orig in pending[:36]:
+                image = render_page(document, orig, width=220)
                 pixmap = QPixmap.fromImage(as_qimage(image))
-                self.base_pixmaps[index] = pixmap
-                item = QListWidgetItem(QIcon(pixmap), tr("Página {0}").format(index + 1))
-                item.setData(Qt.ItemDataRole.UserRole, index)
-                item.setTextAlignment(Qt.AlignmentFlag.AlignHCenter)
-                self.grid.addItem(item)
+                self.base_pixmaps[orig] = pixmap
+                angle = self.rotations.get(orig, 0)
+                shown = pixmap.transformed(QTransform().rotate(angle), Qt.TransformationMode.SmoothTransformation) if angle else pixmap
+                item.setIcon(QIcon(shown))
+        if len(pending) > 36:
+            self._thumb_timer.start()
 
     def update_thumb_size(self, size):
         self.grid.setIconSize(QSize(size, int(size * 1.35)))
         self.grid.setGridSize(QSize(size + 28, int(size * 1.35) + 38))
+        self.schedule_visible_thumbnails()
 
-    def shift_selected(self, delta):
+    def move_selected_to_position(self):
         rows = sorted(self.grid.row(item) for item in self.grid.selectedItems())
         if not rows:
             return
-        if delta < 0 and rows[0] == 0:
+        target, ok = QInputDialog.getInt(
+            self,
+            tr("Mover a posición"),
+            tr("Nueva posición (1 a {0}):").format(self.grid.count()),
+            rows[0] + 1,
+            1,
+            self.grid.count(),
+        )
+        if not ok:
             return
-        if delta > 0 and rows[-1] == self.grid.count() - 1:
-            return
-        order = rows if delta < 0 else list(reversed(rows))
-        moved_items = []
-        for row in order:
-            item = self.grid.takeItem(row)
-            self.grid.insertItem(row + delta, item)
-            moved_items.append(item)
-        for item in moved_items:
+        moved = [self.grid.takeItem(r) for r in reversed(rows)]
+        moved.reverse()
+        dest = max(0, min(target - 1, self.grid.count()))
+        self.grid.clearSelection()
+        for offset, item in enumerate(moved):
+            self.grid.insertItem(dest + offset, item)
             item.setSelected(True)
-        self.grid.setCurrentItem(moved_items[0])
+        self.grid.scrollToItem(moved[0])
+        self.schedule_visible_thumbnails()
 
     def rotate_selected(self):
         for item in self.grid.selectedItems():
             orig = item.data(Qt.ItemDataRole.UserRole)
             angle = (self.rotations.get(orig, 0) + 90) % 360
             self.rotations[orig] = angle
-            base = self.base_pixmaps[orig]
-            rotated = base.transformed(QTransform().rotate(angle), Qt.TransformationMode.SmoothTransformation) if angle else base
-            item.setIcon(QIcon(rotated))
+            base = self.base_pixmaps.get(orig)
+            if base is not None:
+                rotated = base.transformed(QTransform().rotate(angle), Qt.TransformationMode.SmoothTransformation) if angle else base
+                item.setIcon(QIcon(rotated))
             suffix = f" ({angle}°)" if angle else ""
             item.setText(tr("Página {0}").format(orig + 1) + suffix)
 
@@ -1055,6 +1166,7 @@ class OrganizePagesDialog(QDialog):
             return
         for item in selected:
             self.grid.takeItem(self.grid.row(item))
+        self.schedule_visible_thumbnails()
 
     def result_plan(self):
         order = []
