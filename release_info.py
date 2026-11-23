@@ -10,9 +10,20 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 APP_NAME = "PDFiu"
 APP_VERSION = "0.12.0"
+STORE_ID = "9NK06R3SRRW3"
+STORE_PROTOCOL_URL = f"ms-windows-store://pdp/?productid={STORE_ID}"
+STORE_WEB_URL = f"https://apps.microsoft.com/detail/{STORE_ID}"
 DEFAULT_UPDATE_CHANNEL = "https://raw.githubusercontent.com/mfcb89/pdfiu/main/updates.json"
 _VERSION_RE = re.compile(r"[0-9]{1,6}(?:\.[0-9]{1,6}){2}")
 _SHA256_RE = re.compile(r"[0-9a-fA-F]{64}")
+
+
+def is_store_package():
+    if Path(__file__).with_name("msix-store.flag").is_file():
+        return True
+    if Path(__file__).resolve().parent.joinpath("msix-store.flag").is_file():
+        return True
+    return False
 
 
 @dataclass(frozen=True)

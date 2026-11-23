@@ -40,7 +40,7 @@ from pdf_ops import (
 )
 from pdfiu_ui import ANNOTATION_CARD_ROLE, HeaderEditor, PageNavigator, PanelRail, SEARCH_EXCERPT_ROLE, STYLE, SearchResultDelegate, TourSpotlight, apply_theme, brand_icon, icon, signature_details_html, startup_screen, text_line_boxes
 from plan_tools import inspect_document, layer_list, layer_preview, measured_value, prepare_recipe
-from release_info import APP_NAME, APP_VERSION, latest_release, update_channel
+from release_info import APP_NAME, APP_VERSION, STORE_PROTOCOL_URL, is_store_package, latest_release, update_channel
 from document_export import export_document, markdown_from_pdf
 from translations import current_language, initialize_language, tr
 from tool_help import tool_hint
@@ -1479,6 +1479,8 @@ class PDFiu(QMainWindow):
         dialog.exec()
 
     def schedule_update_check(self):
+        if is_store_package():
+            return
         if not self.preferences.value("actualizaciones/comprobar_al_iniciar", False, type=bool):
             return
         last_checked = self.preferences.value("actualizaciones/ultima_comprobacion", 0, type=int)
@@ -1513,6 +1515,21 @@ class PDFiu(QMainWindow):
             QMessageBox.warning(self, tr("Actualizaciones"), tr("No se pudo abrir la página de descarga."))
 
     def check_updates(self, silent=False):
+        if is_store_package():
+            if not silent:
+                dialog = QMessageBox(self)
+                dialog.setWindowTitle(tr("Actualizaciones"))
+                dialog.setText(
+                    tr("Tienes {0} {1}. Las actualizaciones de esta versión se gestionan automáticamente desde Microsoft Store.").format(
+                        APP_NAME, APP_VERSION
+                    )
+                )
+                open_store = dialog.addButton(tr("Abrir Microsoft Store"), QMessageBox.ButtonRole.AcceptRole)
+                dialog.addButton(tr("Cerrar"), QMessageBox.ButtonRole.RejectRole)
+                dialog.exec()
+                if dialog.clickedButton() == open_store:
+                    QDesktopServices.openUrl(QUrl(STORE_PROTOCOL_URL))
+            return
         if not silent and self.job is not None:
             return
         if silent and self.update_job is not None:
