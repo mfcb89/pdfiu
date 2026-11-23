@@ -894,6 +894,9 @@ class PDFiu(QMainWindow):
         self.document_controls += (find, next_match, previous_match)
 
         view = bar.addMenu(tr("&Vista"))
+        self.menu_two_page = view.addAction(tr("Doble página"))
+        self.menu_two_page.setCheckable(True)
+        self.menu_two_page.toggled.connect(self.toggle_two_page)
         add(view, tr("Enfocar documento"), self.toggle_focus, None, "F9")
         add(view, tr("Pantalla completa"), self.toggle_fullscreen, key.FullScreen, "F11")
         self.document_controls += (
@@ -2153,6 +2156,13 @@ class PDFiu(QMainWindow):
         self.focus_toggle.setText(tr("Salir del enfoque") if self.focus_layout is not None else tr("Enfocar"))
         self.focus_toggle.setToolTip(f"{self.focus_toggle.text()} (F9)")
         self.sync_tool_panel()
+
+    def toggle_two_page(self, enabled=None):
+        if enabled is None:
+            enabled = not self.view.two_page
+        with QSignalBlocker(self.menu_two_page):
+            self.menu_two_page.setChecked(bool(enabled))
+        self.view.set_two_page(bool(enabled))
 
     def toggle_fullscreen(self):
         if self.fullscreen_state is None:

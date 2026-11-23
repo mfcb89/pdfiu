@@ -726,6 +726,8 @@ class ContinuousPageView(PageView):
     def __init__(self):
         super().__init__()
         self.source = None
+        self.two_page = False
+        self._page_sizes = []
         self.frames = []
         self.tops = []
         self.bottoms = []
@@ -789,15 +791,37 @@ class ContinuousPageView(PageView):
             self.tiles.clear()
             self.source = path
             self.password = password
+            self._page_sizes = list(sizes)
             self.frames = []
-            width = max(w for w, _ in sizes) * 96 / 72
-            top = 18.0
-            for page_width, page_height in sizes:
-                w, h = page_width * 96 / 72, page_height * 96 / 72
-                self.frames.append(QRectF((width-w)/2, top, w, h))
-                top += h + 20
+            self.bottoms = []
+            if self.two_page and len(sizes) > 1:
+                gutter = 16.0
+                rows = []
+                for start in range(0, len(sizes), 2):
+                    pair = [(w * 96 / 72, h * 96 / 72) for w, h in sizes[start:start + 2]]
+                    row_w = sum(w for w, _ in pair) + (gutter if len(pair) == 2 else 0.0)
+                    row_h = max(h for _, h in pair)
+                    rows.append((pair, row_w, row_h))
+                width = max(row_w for _, row_w, _ in rows)
+                top = 18.0
+                for pair, row_w, row_h in rows:
+                    left = (width - row_w) / 2
+                    row_bottom = top + row_h
+                    for w, h in pair:
+                        self.frames.append(QRectF(left, top + (row_h - h) / 2, w, h))
+                        self.bottoms.append(row_bottom)
+                        left += w + gutter
+                    top = row_bottom + 20.0
+            else:
+                width = max(w for w, _ in sizes) * 96 / 72
+                top = 18.0
+                for page_width, page_height in sizes:
+                    w, h = page_width * 96 / 72, page_height * 96 / 72
+                    rect = QRectF((width - w) / 2, top, w, h)
+                    self.frames.append(rect)
+                    self.bottoms.append(rect.bottom())
+                    top += h + 20
             self.tops = [rect.top() for rect in self.frames]
-            self.bottoms = [rect.bottom() for rect in self.frames]
             self.scene().setSceneRect(QRectF(-22, 0, width+44, top))
             self.active_index = None
             self.activate(index)
@@ -821,6 +845,24 @@ class ContinuousPageView(PageView):
         super().zoom(factor, at_mouse=at_mouse)
         self.schedule_pages()
 
+    def set_two_page(self, enabled):
+        enabled = bool(enabled)
+        if self.two_page == enabled:
+            return
+        self.two_page = enabled
+        if self.source and self._page_sizes:
+            current = self.active_index if self.active_index is not None else 0
+            self.set_document(self.source, self._page_sizes, current, keep_position=False, password=self.password)
+
+    def spread_rect(self, index):
+        rect = self.frames[index]
+        if not self.two_page or len(self.frames) <= 1:
+            return rect
+        partner = index + 1 if index % 2 == 0 else index - 1
+        if 0 <= partner < len(self.frames):
+            return rect.united(self.frames[partner])
+        return rect
+
     def apply_fit(self):
         if self.page_rect.isEmpty():
             return
@@ -832,9 +874,10 @@ class ContinuousPageView(PageView):
         try:
             width = self.viewport().width() - 30
             height = self.viewport().height() - 28
-            scale = width / (self.page_rect.width() + 18)
+            target = self.spread_rect(self.active_index) if self.active_index is not None else self.page_rect
+            scale = width / (target.width() + 18)
             if self.fit != "width":
-                scale = min(scale, height / (self.page_rect.height() + 16))
+                scale = min(scale, height / (target.height() + 16))
             self.set_zoom(max(0.02, scale))
             self.center_page(self.active_index)
         finally:
@@ -842,7 +885,7 @@ class ContinuousPageView(PageView):
         self.schedule_pages()
 
     def center_page(self, index):
-        rect = self.frames[index]
+        rect = self.spread_rect(index)
         visible = self.viewport().height() / self.transform().m11()
         self.centerOn(rect.center().x(), min(rect.center().y(), rect.top() - 9 + visible/2))
 
@@ -1011,13 +1054,15 @@ class ContinuousPageView(PageView):
             if not in_editor:
                 self.finish_inline()
                 point = self.mapToScene(event.position().toPoint())
-                index = bisect_right(self.bottoms, point.y())
-                if index < len(self.frames) and self.frames[index].contains(point):
-                    try:
-                        self.activate(index)
-                    except Exception as error:
-                        self.text_error.emit(str(error))
-                        return
+                start = bisect_left(self.bottoms, point.y())
+                for candidate in range(start, min(len(self.frames), start + 2)):
+                    if self.frames[candidate].contains(point):
+                        try:
+                            self.activate(candidate)
+                        except Exception as error:
+                            self.text_error.emit(str(error))
+                            return
+                        break
         super().mousePressEvent(event)
 
 

@@ -89,6 +89,48 @@ class PdfOpsTests(unittest.TestCase):
             self.assertFalse(PdfReader(str(unlocked)).is_encrypted)
             self.assertEqual(len(PdfReader(str(unlocked)).pages), 2)
 
+    def test_redact_copy_destroys_text_and_strips_metadata(self):
+        from pypdf import PdfReader, PdfWriter
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            raw = root / "secret_raw.pdf"
+            _make_text_pdf(raw, ["DATO CONFIDENCIAL 12345678Z"])
+            src = root / "secret.pdf"
+            writer = PdfWriter(clone_from=PdfReader(str(raw)))
+            writer.add_metadata({"/Author": "Autor Secreto", "/Title": "Titulo Privado"})
+            with src.open("wb") as stream:
+                writer.write(stream)
+
+            redacted = root / "redacted.pdf"
+            self.pdf_ops.redact_copy(src, redacted, {0: [(60, 730, 350, 775)]}, lambda *_: None)
+            with self.pdf_ops.page_text(redacted, 0) as text_page:
+                extracted = text_page.get_text_bounded()
+            self.assertNotIn("CONFIDENCIAL", extracted)
+            self.assertNotIn("12345678Z", extracted)
+            meta = PdfReader(str(redacted)).metadata or {}
+            self.assertNotEqual(meta.get("/Author"), "Autor Secreto")
+            self.assertNotEqual(meta.get("/Title"), "Titulo Privado")
+
+    def test_compress_copy_reduces_image_pdf_size(self):
+        from PIL import Image
+        from reportlab.lib.utils import ImageReader
+        from reportlab.pdfgen import canvas
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            src = root / "heavy.pdf"
+            img = Image.effect_noise((1400, 1400), 40).convert("RGB")
+            c = canvas.Canvas(str(src), pagesize=(595, 842))
+            c.drawImage(ImageReader(img), 40, 120, width=500, height=500)
+            c.showPage()
+            c.save()
+
+            compressed = root / "compressed.pdf"
+            before, after, _, _ = self.pdf_ops.compress_copy(src, compressed, quality=65, dpi=150, allow_larger=False)
+            self.assertGreater(before, after)
+            self.assertTrue(compressed.is_file())
+
 
 if __name__ == "__main__":
     unittest.main()

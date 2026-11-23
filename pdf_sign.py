@@ -216,14 +216,25 @@ class WindowsSigner(signers.Signer):
     async def async_sign_raw(self, data, digest_algorithm, dry_run=False):
         if digest_algorithm != "sha256":
             raise ValueError(tr("La firma de Windows usa SHA-256."))
+        algo = self.signing_cert.public_key.algorithm
         if dry_run:
+            if algo == "ec":
+                return bytes(144)
             key = self.signing_cert.public_key["public_key"].parsed
             return bytes((key["modulus"].native.bit_length() + 7) // 8)
         signature = await asyncio.to_thread(
             windows_cert, "sign", thumbprint=self.thumbprint, location=self.location,
             data=base64.b64encode(data).decode("ascii")
         )
-        return base64.b64decode(signature)
+        raw = base64.b64decode(signature)
+        if algo == "ec":
+            from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
+
+            half = len(raw) // 2
+            r = int.from_bytes(raw[:half], "big")
+            s = int.from_bytes(raw[half:], "big")
+            return encode_dss_signature(r, s)
+        return raw
 
 
 @dataclass(frozen=True)
