@@ -918,6 +918,46 @@ class SplitDialog(QDialog):
         )
 
 
+class _PageGrid(QListWidget):
+    """Icon-mode grid that genuinely reorders model rows on drag-and-drop."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setViewMode(QListWidget.ViewMode.IconMode)
+        self.setFlow(QListWidget.Flow.LeftToRight)
+        self.setWrapping(True)
+        self.setResizeMode(QListWidget.ResizeMode.Adjust)
+        self.setMovement(QListWidget.Movement.Static)
+        self.setDragEnabled(True)
+        self.setAcceptDrops(True)
+        self.setDropIndicatorShown(True)
+        self.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+        self.setDefaultDropAction(Qt.DropAction.MoveAction)
+        self.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.setSpacing(12)
+        self.setWordWrap(True)
+
+    def dropEvent(self, event):
+        if event.source() is not self:
+            super().dropEvent(event)
+            return
+        selected_rows = sorted(self.row(item) for item in self.selectedItems())
+        if not selected_rows:
+            event.ignore()
+            return
+        target_item = self.itemAt(event.position().toPoint())
+        target_row = self.row(target_item) if target_item is not None else self.count()
+        moved = [self.takeItem(r) for r in reversed(selected_rows)]
+        moved.reverse()
+        adjusted_target = target_row - sum(1 for r in selected_rows if r < target_row)
+        adjusted_target = max(0, min(adjusted_target, self.count()))
+        for offset, item in enumerate(moved):
+            self.insertItem(adjusted_target + offset, item)
+            item.setSelected(True)
+        self.setCurrentItem(moved[0])
+        event.accept()
+
+
 class OrganizePagesDialog(QDialog):
     def __init__(self, path, count, password=None, parent=None):
         super().__init__(parent)
@@ -931,6 +971,8 @@ class OrganizePagesDialog(QDialog):
 
         layout = QVBoxLayout(self)
         toolbar = QHBoxLayout()
+        toolbar.addWidget(button("Mover antes", lambda: self.shift_selected(-1), glyph="chevron-left"))
+        toolbar.addWidget(button("Mover después", lambda: self.shift_selected(1), glyph="chevron-right"))
         toolbar.addWidget(button("Girar 90°", self.rotate_selected, glyph="reload-circle"))
         toolbar.addWidget(button("Eliminar", self.delete_selected, glyph="delete-bin"))
         toolbar.addStretch(1)
@@ -943,19 +985,14 @@ class OrganizePagesDialog(QDialog):
         toolbar.addWidget(self.thumb_slider)
         layout.addLayout(toolbar)
 
-        hint = QLabel(tr("Arrastra las miniaturas para reordenar. Usa Ctrl o Mayús para seleccionar varias."), objectName="muted")
+        hint = QLabel(
+            tr("Arrastra las miniaturas sobre otra posición o usa Mover antes / Mover después. Usa Ctrl o Mayús para seleccionar varias."),
+            objectName="muted",
+        )
         hint.setWordWrap(True)
         layout.addWidget(hint)
 
-        self.grid = QListWidget()
-        self.grid.setViewMode(QListWidget.ViewMode.IconMode)
-        self.grid.setResizeMode(QListWidget.ResizeMode.Adjust)
-        self.grid.setMovement(QListWidget.Movement.Snap)
-        self.grid.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
-        self.grid.setDefaultDropAction(Qt.DropAction.MoveAction)
-        self.grid.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
-        self.grid.setSpacing(12)
-        self.grid.setWordWrap(True)
+        self.grid = _PageGrid(self)
         layout.addWidget(self.grid, 1)
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
@@ -982,6 +1019,24 @@ class OrganizePagesDialog(QDialog):
     def update_thumb_size(self, size):
         self.grid.setIconSize(QSize(size, int(size * 1.35)))
         self.grid.setGridSize(QSize(size + 28, int(size * 1.35) + 38))
+
+    def shift_selected(self, delta):
+        rows = sorted(self.grid.row(item) for item in self.grid.selectedItems())
+        if not rows:
+            return
+        if delta < 0 and rows[0] == 0:
+            return
+        if delta > 0 and rows[-1] == self.grid.count() - 1:
+            return
+        order = rows if delta < 0 else list(reversed(rows))
+        moved_items = []
+        for row in order:
+            item = self.grid.takeItem(row)
+            self.grid.insertItem(row + delta, item)
+            moved_items.append(item)
+        for item in moved_items:
+            item.setSelected(True)
+        self.grid.setCurrentItem(moved_items[0])
 
     def rotate_selected(self):
         for item in self.grid.selectedItems():

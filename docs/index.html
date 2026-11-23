@@ -3,232 +3,524 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>PDFiu — Lector y editor de PDF ligero y 100% local</title>
-  <meta name="description" content="Alternativa ligera, local y de código abierto a lectores PDF propietarios. Lee, edita, firma (RSA/ECDSA), mide planos, aplica OCR y exporta sin cuentas ni nube.">
+  <title>PDFiu — Lector y editor de PDF ligero y local</title>
+  <meta name="description" content="Aplicación de escritorio ligera y 100% local para leer, organizar, editar, firmar y convertir PDF. Código abierto bajo licencia MIT.">
   <style>
     :root {
-      --bg: #f6f9f7;
+      --bg: #f7f9f8;
       --surface: #ffffff;
-      --ink: #182a3d;
-      --muted: #516472;
-      --accent: #2f7d6d;
-      --accent-dark: #215c50;
-      --border: #dce6e1;
-      --pill: #e6f4ee;
+      --surface-alt: #f0f4f2;
+      --ink: #162636;
+      --muted: #526473;
+      --accent: #256d61;
+      --accent-hover: #1d574d;
+      --mint: #e5f3ee;
+      --border: #dce5e0;
+      --border-strong: #c5d3cc;
+      --kbd-bg: #eef2f0;
+      --shadow: 0 1px 2px rgba(22, 38, 54, 0.05), 0 18px 44px rgba(22, 38, 54, 0.08);
     }
     @media (prefers-color-scheme: dark) {
       :root {
-        --bg: #11161c;
-        --surface: #1a2028;
-        --ink: #e6edf3;
-        --muted: #8b9bb0;
+        --bg: #10151b;
+        --surface: #171d25;
+        --surface-alt: #1d2530;
+        --ink: #e7eef5;
+        --muted: #93a3b5;
         --accent: #4fb39d;
-        --accent-dark: #3a9481;
-        --border: #2b3440;
-        --pill: #1a332d;
+        --accent-hover: #64c4af;
+        --mint: #17302a;
+        --border: #27313d;
+        --border-strong: #374556;
+        --kbd-bg: #222b36;
+        --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 20px 50px rgba(0, 0, 0, 0.45);
       }
     }
     * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
     body {
-      margin: 0; font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
-      background: var(--bg); color: var(--ink); line-height: 1.6;
+      margin: 0;
+      font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
     }
-    .wrap { max-width: 1040px; margin: 0 auto; padding: 24px 20px 64px; }
+    .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+
+    /* Top navigation */
     header {
-      display: flex; align-items: center; justify-content: space-between;
-      gap: 16px; padding-bottom: 24px; border-bottom: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      position: sticky;
+      top: 0;
+      z-index: 20;
     }
-    .brand { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
-    .brand span { color: var(--accent); }
-    nav { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+    .nav-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 62px;
+      gap: 16px;
+    }
+    .brand-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+      color: var(--ink);
+      font-weight: 750;
+      font-size: 19px;
+      letter-spacing: -0.02em;
+    }
+    .brand-link .iu { color: var(--accent); }
+    .brand-mark { width: 30px; height: 28px; display: block; }
+    nav { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
     nav a, .lang-btn {
-      color: var(--muted); text-decoration: none; font-weight: 600; font-size: 14px;
-      background: none; border: 0; cursor: pointer; padding: 4px 8px; border-radius: 6px;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 600;
+      padding: 6px 10px;
+      border-radius: 7px;
+      background: transparent;
+      border: 1px solid transparent;
+      cursor: pointer;
     }
-    nav a:hover, .lang-btn:hover { color: var(--ink); background: var(--pill); }
-    .hero { text-align: center; padding: 48px 0 32px; }
-    .badge {
-      display: inline-block; background: var(--pill); color: var(--accent);
-      font-weight: 700; font-size: 12px; padding: 5px 12px; border-radius: 999px;
-      margin-bottom: 16px;
+    nav a:hover, .lang-btn:hover { color: var(--ink); background: var(--surface-alt); }
+    .lang-btn { border-color: var(--border); color: var(--ink); margin-left: 6px; }
+
+    /* Hero */
+    .hero { padding: 56px 0 40px; }
+    .hero-top { max-width: 760px; }
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--accent);
+      background: var(--mint);
+      padding: 4px 11px;
+      border-radius: 6px;
+      margin-bottom: 18px;
     }
-    h1 { font-size: clamp(30px, 4.5vw, 46px); line-height: 1.15; margin: 0 0 16px; letter-spacing: -0.02em; }
-    .lead { max-width: 700px; margin: 0 auto 28px; color: var(--muted); font-size: 17px; }
-    .cta-row { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; margin-bottom: 36px; }
+    h1 {
+      font-size: clamp(30px, 4.2vw, 44px);
+      line-height: 1.14;
+      letter-spacing: -0.025em;
+      margin: 0 0 16px;
+      font-weight: 750;
+    }
+    .lead {
+      font-size: 17px;
+      color: var(--muted);
+      margin: 0 0 26px;
+      max-width: 660px;
+    }
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 22px; }
     .btn {
-      display: inline-block; padding: 12px 22px; border-radius: 9px; font-weight: 600;
-      text-decoration: none; border: 1px solid var(--border); background: var(--surface); color: var(--ink);
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 11px 18px;
+      border-radius: 8px;
+      font-size: 14.5px;
+      font-weight: 600;
+      text-decoration: none;
+      border: 1px solid var(--border-strong);
+      background: var(--surface);
+      color: var(--ink);
+      transition: background 0.15s ease, border-color 0.15s ease;
     }
-    .btn.primary { background: var(--accent); color: #ffffff; border-color: var(--accent); }
-    .btn.primary:hover { background: var(--accent-dark); }
-    .btn:hover { border-color: var(--accent); }
-    .shot {
-      width: 100%; border-radius: 14px; border: 1px solid var(--border);
-      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.12); display: block;
+    .btn:hover { background: var(--surface-alt); border-color: var(--accent); }
+    .btn.primary { background: var(--accent); border-color: var(--accent); color: #ffffff; }
+    .btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+    .btn svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+    .facts {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 18px;
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 34px;
     }
-    section { margin-top: 56px; }
-    h2 { font-size: 26px; margin: 0 0 18px; letter-spacing: -0.01em; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
-    .card {
-      background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    .facts span { display: inline-flex; align-items: center; gap: 6px; }
+    .facts svg { width: 15px; height: 15px; color: var(--accent); }
+
+    .window-frame {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+    .window-frame img { width: 100%; display: block; }
+
+    /* Sections */
+    section { padding: 52px 0 0; }
+    .section-head { margin-bottom: 24px; max-width: 640px; }
+    .section-head h2 { font-size: 25px; letter-spacing: -0.02em; margin: 0 0 6px; }
+    .section-head p { margin: 0; color: var(--muted); font-size: 15px; }
+
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(295px, 1fr));
+      gap: 14px;
+    }
+    .feature {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
       padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
     }
-    .card h3 { margin: 0 0 8px; font-size: 16px; }
-    .card p { margin: 0; color: var(--muted); font-size: 14px; }
-    .pricing { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 18px; }
-    .price-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 24px; }
-    .price-card.featured { border-color: var(--accent); border-width: 2px; }
-    .price-tag { font-size: 28px; font-weight: 800; margin: 8px 0 12px; }
-    ul { padding-left: 20px; color: var(--muted); font-size: 14px; }
-    li { margin-bottom: 6px; }
+    .feature-head { display: flex; align-items: center; gap: 10px; }
+    .icon-box {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      background: var(--mint);
+      color: var(--accent);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .icon-box svg { width: 18px; height: 18px; }
+    .feature h3 { margin: 0; font-size: 15.5px; font-weight: 650; }
+    .feature p { margin: 0; font-size: 14px; color: var(--muted); }
+
+    /* Keyboard strip */
+    .kbd-strip {
+      margin-top: 24px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px 20px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 14px 24px;
+      font-size: 13.5px;
+      color: var(--muted);
+    }
+    kbd {
+      font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+      font-size: 12px;
+      background: var(--kbd-bg);
+      color: var(--ink);
+      border: 1px solid var(--border-strong);
+      border-radius: 5px;
+      padding: 2px 6px;
+      margin-right: 5px;
+    }
+
+    /* Distribution */
+    .dist-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 16px;
+    }
+    .dist-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 18px;
+    }
+    .dist-card.official { border-color: var(--accent); }
+    .dist-card h3 { margin: 0 0 4px; font-size: 18px; }
+    .dist-sub { color: var(--muted); font-size: 13.5px; margin: 0 0 14px; }
+    .dist-card ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 14px; }
+    .dist-card li { margin-bottom: 6px; }
+
+    /* Legal */
+    .legal-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px 22px;
+      font-size: 13.5px;
+      color: var(--muted);
+    }
+    .legal-box p { margin: 0 0 10px; }
+    .legal-box p:last-child { margin-bottom: 0; }
+    .legal-box a { color: var(--accent); text-decoration: none; font-weight: 500; }
+    .legal-box a:hover { text-decoration: underline; }
+    code {
+      font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+      font-size: 12.5px;
+      background: var(--surface-alt);
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+
     footer {
-      margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--border);
-      color: var(--muted); font-size: 13px;
+      margin-top: 56px;
+      padding: 24px 0 40px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      font-size: 13px;
+      color: var(--muted);
     }
-    footer a { color: var(--accent); }
+    footer a { color: var(--muted); text-decoration: none; }
+    footer a:hover { color: var(--ink); }
+
+    /* Language toggle */
     [data-lang="en"] { display: none; }
     body.en [data-lang="es"] { display: none; }
     body.en [data-lang="en"] { display: initial; }
-    body.en div[data-lang="en"], body.en section[data-lang="en"], body.en p[data-lang="en"], body.en ul[data-lang="en"] { display: block; }
+    body.en p[data-lang="en"], body.en ul[data-lang="en"], body.en div[data-lang="en"] { display: block; }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <header>
-      <div class="brand">PDF<span>iu</span></div>
+  <header>
+    <div class="wrap nav-bar">
+      <a class="brand-link" href="#">
+        <svg class="brand-mark" viewBox="10 10 90 82" aria-hidden="true">
+          <path fill="currentColor" d="M16 13 55 36 64 44 74 29 84 28 94 37 83 41 76 61 62 75 23 87 36 68 16 56Z"/>
+          <path fill="#317f72" d="M16 13 52 36 65 49 36 68 16 56Z"/>
+          <path fill="#97d7c3" d="M16 13 52 36 36 43Z"/>
+        </svg>
+        <span>PDF<span class="iu">iu</span></span>
+      </a>
       <nav>
-        <a href="#features"><span data-lang="es">Funciones</span><span data-lang="en">Features</span></a>
-        <a href="#download"><span data-lang="es">Descargar</span><span data-lang="en">Download</span></a>
-        <a href="#licenses"><span data-lang="es">Licencias y LGPLv3</span><span data-lang="en">Licenses &amp; LGPLv3</span></a>
+        <a href="#funciones"><span data-lang="es">Funciones</span><span data-lang="en">Features</span></a>
+        <a href="#descarga"><span data-lang="es">Obtener</span><span data-lang="en">Get PDFiu</span></a>
+        <a href="#licencias"><span data-lang="es">Licencias</span><span data-lang="en">Licenses</span></a>
         <a href="https://github.com/mfcb89/pdfiu">GitHub</a>
-        <button class="lang-btn" id="toggleLang" type="button">EN</button>
+        <button class="lang-btn" id="toggleLang" type="button" aria-label="Switch language">EN</button>
       </nav>
-    </header>
-
-    <div class="hero">
-      <div class="badge">v0.12.0 · Windows x64 · MIT Open Source</div>
-      <h1>
-        <span data-lang="es">Tu lector y editor de PDF ligero, completo y 100% local</span>
-        <span data-lang="en">Your lightweight, complete, 100% local PDF reader &amp; editor</span>
-      </h1>
-      <p class="lead" data-lang="es">
-        Sin cuentas, sin suscripciones y sin subir tus documentos a la nube. Lee con pestañas y doble página, organiza en cuadrícula, firma con certificados RSA/ECDSA, compara y mide planos, aplica OCR y exporta a Word, Excel o Markdown.
-      </p>
-      <p class="lead" data-lang="en">
-        No account, no subscription, and no cloud uploads. Read with tear-off tabs and two-page view, organize pages in a grid, sign with RSA/ECDSA certificates, compare and measure drawings, run OCR, and export to Word, Excel, or Markdown.
-      </p>
-      <div class="cta-row">
-        <a class="btn primary" href="#download">
-          <span data-lang="es">Obtener PDFiu 0.12.0</span>
-          <span data-lang="en">Get PDFiu 0.12.0</span>
-        </a>
-        <a class="btn" href="https://github.com/mfcb89/pdfiu">
-          <span data-lang="es">Ver código fuente en GitHub</span>
-          <span data-lang="en">View source on GitHub</span>
-        </a>
-      </div>
-      <img class="shot" id="heroShot" src="pdfiu-es.png" alt="PDFiu desktop application">
     </div>
+  </header>
 
-    <section id="features">
-      <h2>
-        <span data-lang="es">Todo lo que necesitas sin bloatware</span>
-        <span data-lang="en">Everything you need without bloatware</span>
-      </h2>
-      <div class="grid">
-        <div class="card">
-          <h3><span data-lang="es">Lectura moderna</span><span data-lang="en">Modern reading</span></h3>
-          <p data-lang="es">Pestañas desacoplables en nuevas ventanas, doble página (Ctrl+2), tema oscuro/claro, búsqueda instantánea (Ctrl+F), filtro en marcadores y paleta de comandos (Ctrl+K).</p>
-          <p data-lang="en">Tear-off tabs into new windows, two-page view (Ctrl+2), dark/light themes, instant find bar (Ctrl+F), bookmark filtering, and command palette (Ctrl+K).</p>
-        </div>
-        <div class="card">
-          <h3><span data-lang="es">Organizar, unir y dividir</span><span data-lang="en">Organize, merge &amp; split</span></h3>
-          <p data-lang="es">Mesa de trabajo para lotes, vista en cuadrícula para reordenar/girar/eliminar, unión con índice automático, extracción de rangos y división cada N páginas.</p>
-          <p data-lang="en">Multi-PDF workspace for batches, grid view to reorder/rotate/delete, merge with bookmarks, range extraction, and split every N pages.</p>
-        </div>
-        <div class="card">
-          <h3><span data-lang="es">Firmas RSA / ECDSA y censura</span><span data-lang="en">RSA / ECDSA signing &amp; redaction</span></h3>
-          <p data-lang="es">Firma PAdES con almacén de Windows o archivos P12/PFX, firma en lote, verificación de integridad, cifrado AES-256 y censura irreversible.</p>
-          <p data-lang="en">PAdES signing with Windows certificate store or P12/PFX files, batch signing, integrity verification, AES-256 encryption, and irreversible redaction.</p>
-        </div>
-        <div class="card">
-          <h3><span data-lang="es">Planos y mediciones</span><span data-lang="en">Drawings &amp; measurements</span></h3>
-          <p data-lang="es">Comparación en paralelo, superposición y diferencias verde/rojo/ámbar con alineación en mm. Calibración de escala 1:N y superficies guardadas.</p>
-          <p data-lang="en">Side-by-side, overlay, and color-coded diff comparison with mm alignment. Scale calibration (1:N) and saved area measurements.</p>
-        </div>
-        <div class="card">
-          <h3><span data-lang="es">OCR y exportación</span><span data-lang="en">OCR &amp; export</span></h3>
-          <p data-lang="es">OCR local en español e inglés (Tesseract). Exporta a Word (.docx), Excel (.xlsx), CSV, Markdown con vista previa, TXT o PNG.</p>
-          <p data-lang="en">Local English and Spanish OCR (Tesseract). Export to Word (.docx), Excel (.xlsx), CSV, Markdown with preview, TXT, or PNG.</p>
-        </div>
-        <div class="card">
-          <h3><span data-lang="es">Impresión, compresión y PDF/A</span><span data-lang="en">Print, compress &amp; PDF/A</span></h3>
-          <p data-lang="es">Vista previa de impresión, mosaico con solape, folleto, compresión con estimación y comparación al 100%, y salida PDF/A validada.</p>
-          <p data-lang="en">Print preview, tiled sheets, booklet mode, compression with size estimate and 100% visual comparison, and validated PDF/A export.</p>
-        </div>
-      </div>
-    </section>
-
-    <section id="download">
-      <h2>
-        <span data-lang="es">Código abierto sostenible</span>
-        <span data-lang="en">Sustainable open source</span>
-      </h2>
-      <div class="pricing">
-        <div class="price-card">
-          <h3><span data-lang="es">Código fuente (GitHub)</span><span data-lang="en">Source code (GitHub)</span></h3>
-          <div class="price-tag"><span data-lang="es">Gratis</span><span data-lang="en">Free</span></div>
-          <ul data-lang="es">
-            <li>Código completo bajo licencia MIT.</li>
-            <li>Compila y ejecuta gratis con Python 3.12.</li>
-            <li>Incluye receta de empaquetado y suite de 26 tests.</li>
-          </ul>
-          <ul data-lang="en">
-            <li>Complete source code under the MIT License.</li>
-            <li>Build and run for free with Python 3.12.</li>
-            <li>Includes packaging recipe and 26 automated tests.</li>
-          </ul>
-          <a class="btn" href="https://github.com/mfcb89/pdfiu">GitHub →</a>
-        </div>
-        <div class="price-card featured">
-          <h3><span data-lang="es">Instalador oficial Windows x64</span><span data-lang="en">Official Windows x64 installer</span></h3>
-          <div class="price-tag"><span data-lang="es">Próximamente</span><span data-lang="en">Coming soon</span></div>
-          <ul data-lang="es">
-            <li>Instalación en un clic (sin Python ni configuración).</li>
-            <li>Modelos OCR en español e inglés integrados.</li>
-            <li>Financia el desarrollo, la firma de código y las actualizaciones.</li>
-          </ul>
-          <ul data-lang="en">
-            <li>One-click installation (no Python setup required).</li>
-            <li>Bundled English and Spanish OCR models.</li>
-            <li>Funds ongoing development, code signing, and updates.</li>
-          </ul>
-          <a class="btn primary" href="https://github.com/mfcb89/pdfiu/releases">
-            <span data-lang="es">Ver novedades y lanzamientos</span>
-            <span data-lang="en">View releases &amp; updates</span>
+  <main class="wrap">
+    <div class="hero">
+      <div class="hero-top">
+        <div class="eyebrow">v0.12.0 · Windows x64 · MIT</div>
+        <h1>
+          <span data-lang="es">Lector y editor de PDF de escritorio, rápido y 100% local.</span>
+          <span data-lang="en">A fast, 100% local desktop PDF reader and editor.</span>
+        </h1>
+        <p class="lead" data-lang="es">
+          Pensado para trabajar con documentos, expedientes y planos sin cuentas, sin nube ni suscripciones. Abre varios archivos en pestañas, firma con certificados de Windows, aplica OCR y exporta directamente en tu equipo.
+        </p>
+        <p class="lead" data-lang="en">
+          Built for working with documents, dossiers, and technical drawings without accounts, cloud uploads, or subscriptions. Open multiple files in tabs, sign with Windows certificates, run OCR, and export locally.
+        </p>
+        <div class="actions">
+          <a class="btn primary" href="#descarga">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <span data-lang="es">Obtener PDFiu 0.12.0</span>
+            <span data-lang="en">Get PDFiu 0.12.0</span>
+          </a>
+          <a class="btn" href="https://github.com/mfcb89/pdfiu">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+            <span data-lang="es">Código fuente en GitHub</span>
+            <span data-lang="en">Source on GitHub</span>
           </a>
         </div>
+        <div class="facts">
+          <span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <span data-lang="es">Sin telemetría ni nube</span><span data-lang="en">No telemetry or cloud</span>
+          </span>
+          <span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            <span data-lang="es">Español e inglés</span><span data-lang="en">English &amp; Spanish</span>
+          </span>
+          <span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+            <span data-lang="es">Tema claro y oscuro</span><span data-lang="en">Light &amp; dark themes</span>
+          </span>
+        </div>
+      </div>
+
+      <div class="window-frame">
+        <img id="heroShot" src="pdfiu-es.png" alt="Interfaz de escritorio de PDFiu">
+      </div>
+    </div>
+
+    <section id="funciones">
+      <div class="section-head">
+        <h2>
+          <span data-lang="es">Herramientas prácticas para trabajo real</span>
+          <span data-lang="en">Practical tools for real document work</span>
+        </h2>
+        <p data-lang="es">Todo se procesa en tu disco con bibliotecas nativas rápidas (PDFium, Tesseract, pyHanko y Qt).</p>
+        <p data-lang="en">Everything runs locally on your machine using fast native libraries (PDFium, Tesseract, pyHanko, and Qt).</p>
+      </div>
+
+      <div class="feature-grid">
+        <div class="feature">
+          <div class="feature-head">
+            <span class="icon-box">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+            </span>
+            <h3><span data-lang="es">Lectura, pestañas y doble página</span><span data-lang="en">Reading, tabs &amp; two-page view</span></h3>
+          </div>
+          <p data-lang="es">Arrastra una pestaña fuera para abrirla en otra ventana, lee a doble hoja, filtra marcadores largos y encuentra cualquier texto o comando en segundos.</p>
+          <p data-lang="en">Drag any tab out into a new window, read two pages side by side, filter long bookmark trees, and find text or commands in seconds.</p>
+        </div>
+
+        <div class="feature">
+          <div class="feature-head">
+            <span class="icon-box">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+            </span>
+            <h3><span data-lang="es">Cuadrícula, unión y división</span><span data-lang="en">Page grid, merge &amp; split</span></h3>
+          </div>
+          <p data-lang="es">Reordena, gira o elimina páginas en cuadrícula, une varios PDF con índice automático, extrae rangos o divide un documento cada N hojas.</p>
+          <p data-lang="en">Reorder, rotate, or delete pages in a grid, merge multiple PDFs with an outline index, extract ranges, or split every N pages.</p>
+        </div>
+
+        <div class="feature">
+          <div class="feature-head">
+            <span class="icon-box">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+            </span>
+            <h3><span data-lang="es">Firma RSA / ECDSA y censura</span><span data-lang="en">RSA / ECDSA signing &amp; redaction</span></h3>
+          </div>
+          <p data-lang="es">Firma PAdES con el almacén de Windows o archivos P12/PFX, firma en lote, verifica integridad, cifra con AES-256 y censura eliminando el contenido real.</p>
+          <p data-lang="en">PAdES signing with the Windows certificate store or P12/PFX files, batch signing, integrity checks, AES-256 encryption, and irreversible redaction.</p>
+        </div>
+
+        <div class="feature">
+          <div class="feature-head">
+            <span class="icon-box">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z"/><path d="m14.5 12.5 2-2"/><path d="m11.5 9.5 2-2"/><path d="m8.5 6.5 2-2"/><path d="m17.5 15.5 2-2"/></svg>
+            </span>
+            <h3><span data-lang="es">Planos, revisiones y escalas</span><span data-lang="en">Drawings, diffs &amp; scale measurement</span></h3>
+          </div>
+          <p data-lang="es">Compara revisiones en paralelo, superpuestas o resaltando diferencias con alineación en mm. Calibra a escala 1:N y guarda mediciones de superficie.</p>
+          <p data-lang="en">Compare revisions side by side, overlaid, or with color-coded diffs and mm alignment. Calibrate 1:N scales and save area measurements.</p>
+        </div>
+
+        <div class="feature">
+          <div class="feature-head">
+            <span class="icon-box">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            </span>
+            <h3><span data-lang="es">OCR y exportación sin subir archivos</span><span data-lang="en">Local OCR &amp; export</span></h3>
+          </div>
+          <p data-lang="es">Reconoce texto en español e inglés con Tesseract y exporta a Word (.docx), Excel (.xlsx), CSV, Markdown con vista previa, TXT o PNG.</p>
+          <p data-lang="en">Recognize English and Spanish text with Tesseract and export to Word (.docx), Excel (.xlsx), CSV, Markdown with preview, TXT, or PNG.</p>
+        </div>
+
+        <div class="feature">
+          <div class="feature-head">
+            <span class="icon-box">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+            </span>
+            <h3><span data-lang="es">Impresión, compresión y PDF/A</span><span data-lang="en">Printing, compression &amp; PDF/A</span></h3>
+          </div>
+          <p data-lang="es">Vista previa con aviso de recorte, mosaico para planos, folleto, compresión con comparación al 100% y generación PDF/A validada.</p>
+          <p data-lang="en">Print preview with clipping warnings, tiled sheets, booklets, compression with 100% visual comparison, and validated PDF/A export.</p>
+        </div>
+      </div>
+
+      <div class="kbd-strip">
+        <span><kbd>Ctrl+K</kbd> <span data-lang="es">Paleta de comandos</span><span data-lang="en">Command palette</span></span>
+        <span><kbd>Ctrl+F</kbd> <span data-lang="es">Búsqueda rápida</span><span data-lang="en">Quick find</span></span>
+        <span><kbd>Ctrl+2</kbd> <span data-lang="es">Doble página</span><span data-lang="en">Two-page view</span></span>
+        <span><kbd>Ctrl+S</kbd> <span data-lang="es">Guardar directo</span><span data-lang="en">Direct save</span></span>
+        <span><kbd>Ctrl+,</kbd> <span data-lang="es">Preferencias y tema</span><span data-lang="en">Preferences &amp; theme</span></span>
       </div>
     </section>
 
-    <section id="licenses">
-      <h2>
-        <span data-lang="es">Licencias y código fuente LGPLv3 (Qt / PySide6)</span>
-        <span data-lang="en">Licenses &amp; LGPLv3 Corresponding Source (Qt / PySide6)</span>
-      </h2>
-      <div class="card">
+    <section id="descarga">
+      <div class="section-head">
+        <h2>
+          <span data-lang="es">Cómo obtener PDFiu</span>
+          <span data-lang="en">How to get PDFiu</span>
+        </h2>
+        <p data-lang="es">El código fuente es abierto bajo MIT y puedes compilarlo gratis; el instalador oficial financia el desarrollo, la firma de código y las actualizaciones.</p>
+        <p data-lang="en">The source code is open under MIT and free to build; the official installer funds ongoing development, code signing, and updates.</p>
+      </div>
+
+      <div class="dist-grid">
+        <div class="dist-card">
+          <div>
+            <h3><span data-lang="es">Desde el código fuente</span><span data-lang="en">From source code</span></h3>
+            <p class="dist-sub"><span data-lang="es">Gratis · Licencia MIT · Python 3.12</span><span data-lang="en">Free · MIT License · Python 3.12</span></p>
+            <ul data-lang="es">
+              <li>Acceso completo al repositorio público y sus 26 tests automáticos.</li>
+              <li>Receta incluida para compilar tu propio paquete en Windows x64 o macOS.</li>
+              <li>Ideal para desarrolladores, auditoría de código o contribuciones.</li>
+            </ul>
+            <ul data-lang="en">
+              <li>Full access to the public repository and its 26 automated tests.</li>
+              <li>Includes build recipe for Windows x64 and macOS.</li>
+              <li>Ideal for developers, auditing, and contributions.</li>
+            </ul>
+          </div>
+          <div>
+            <a class="btn" href="https://github.com/mfcb89/pdfiu#ejecutar-gratis-desde-el-c%C3%B3digo-fuente">
+              <span data-lang="es">Instrucciones en GitHub</span>
+              <span data-lang="en">Build instructions on GitHub</span>
+            </a>
+          </div>
+        </div>
+
+        <div class="dist-card official">
+          <div>
+            <h3><span data-lang="es">Instalador oficial Windows x64</span><span data-lang="en">Official Windows x64 installer</span></h3>
+            <p class="dist-sub"><span data-lang="es">Versión 0.12.0 · Listo en un clic</span><span data-lang="en">Version 0.12.0 · One-click setup</span></p>
+            <ul data-lang="es">
+              <li>Sin instalar Python ni dependencias manualmente.</li>
+              <li>Modelos de OCR en español e inglés incluidos.</li>
+              <li>Integración con el menú contextual de Windows («Combinar con PDFiu»).</li>
+            </ul>
+            <ul data-lang="en">
+              <li>No Python or manual dependency setup required.</li>
+              <li>English and Spanish OCR models bundled.</li>
+              <li>Windows Explorer integration ("Merge files with PDFiu").</li>
+            </ul>
+          </div>
+          <div>
+            <a class="btn primary" href="https://github.com/mfcb89/pdfiu/releases">
+              <span data-lang="es">Ver lanzamientos (v0.12.0)</span>
+              <span data-lang="en">View releases (v0.12.0)</span>
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="licencias">
+      <div class="section-head">
+        <h2>
+          <span data-lang="es">Licencias, marca y cumplimiento LGPLv3</span>
+          <span data-lang="en">Licenses, brand &amp; LGPLv3 compliance</span>
+        </h2>
+      </div>
+      <div class="legal-box">
         <p data-lang="es">
-          El código fuente original de PDFiu se distribuye bajo la <a href="https://github.com/mfcb89/pdfiu/blob/main/LICENSE">licencia MIT</a>. El nombre <strong>PDFiu</strong> y sus logotipos están reservados (<a href="https://github.com/mfcb89/pdfiu/blob/main/TRADEMARKS.md">política de marca</a>).
-          PDFiu utiliza <strong>Qt 6.12.0</strong>, <strong>PySide6 6.12.0</strong> y <strong>Shiboken6 6.12.0</strong> bajo <strong>LGPLv3</strong> enlazados dinámicamente en <code>_internal/PySide6</code> para permitir la sustitución de bibliotecas compatibles. Código fuente correspondiente oficial:
+          El código fuente original de PDFiu se distribuye bajo la <a href="https://github.com/mfcb89/pdfiu/blob/main/LICENSE">licencia MIT</a>. El nombre <strong>PDFiu</strong> y los logotipos en <code>assets/brand/</code> están reservados (<a href="https://github.com/mfcb89/pdfiu/blob/main/TRADEMARKS.md">política de marca</a>).
+        </p>
+        <p data-lang="es">
+          PDFiu utiliza <strong>Qt 6.12.0</strong>, <strong>PySide6 6.12.0</strong> y <strong>Shiboken6 6.12.0</strong> bajo <strong>LGPLv3</strong> enlazados como bibliotecas dinámicas en <code>_internal/PySide6</code> para permitir su sustitución por versiones compatibles. Código fuente correspondiente:
           <a href="https://github.com/qt/qtbase/tree/v6.12.0">Qt Base 6.12.0</a> ·
           <a href="https://github.com/qt/qtsvg/tree/v6.12.0">Qt SVG 6.12.0</a> ·
           <a href="https://github.com/qt/qttranslations/tree/v6.12.0">Qt Translations 6.12.0</a> ·
           <a href="https://download.qt.io/official_releases/QtForPython/pyside6/PySide6-6.12.0-src/">PySide6 &amp; Shiboken 6.12.0</a>.
-          Consulta los <a href="https://github.com/mfcb89/pdfiu/blob/main/THIRD_PARTY_NOTICES.md">avisos completos de terceros</a>.
+          Consulta los <a href="https://github.com/mfcb89/pdfiu/blob/main/THIRD_PARTY_NOTICES.md">avisos de terceros</a>.
         </p>
         <p data-lang="en">
-          PDFiu's original source code is distributed under the <a href="https://github.com/mfcb89/pdfiu/blob/main/LICENSE">MIT License</a>. The <strong>PDFiu</strong> name and logos are reserved (<a href="https://github.com/mfcb89/pdfiu/blob/main/TRADEMARKS.md#pdfiu-trademark-and-brand-policy">brand policy</a>).
-          PDFiu uses <strong>Qt 6.12.0</strong>, <strong>PySide6 6.12.0</strong>, and <strong>Shiboken6 6.12.0</strong> under <strong>LGPLv3</strong> dynamically loaded from <code>_internal/PySide6</code> so compatible libraries can be replaced. Corresponding upstream source:
+          PDFiu's original source code is distributed under the <a href="https://github.com/mfcb89/pdfiu/blob/main/LICENSE">MIT License</a>. The <strong>PDFiu</strong> name and logos in <code>assets/brand/</code> are reserved (<a href="https://github.com/mfcb89/pdfiu/blob/main/TRADEMARKS.md#pdfiu-trademark-and-brand-policy">brand policy</a>).
+        </p>
+        <p data-lang="en">
+          PDFiu uses <strong>Qt 6.12.0</strong>, <strong>PySide6 6.12.0</strong>, and <strong>Shiboken6 6.12.0</strong> under <strong>LGPLv3</strong> loaded as replaceable dynamic libraries in <code>_internal/PySide6</code>. Corresponding source:
           <a href="https://github.com/qt/qtbase/tree/v6.12.0">Qt Base 6.12.0</a> ·
           <a href="https://github.com/qt/qtsvg/tree/v6.12.0">Qt SVG 6.12.0</a> ·
           <a href="https://github.com/qt/qttranslations/tree/v6.12.0">Qt Translations 6.12.0</a> ·
@@ -239,10 +531,16 @@
     </section>
 
     <footer>
-      © 2026 mfcb89 · PDFiu · <a href="https://github.com/mfcb89/pdfiu">github.com/mfcb89/pdfiu</a> ·
-      <a href="https://github.com/mfcb89/pdfiu/blob/main/SECURITY.md">Security</a>
+      <span>© 2026 mfcb89 · PDFiu</span>
+      <span>
+        <a href="https://github.com/mfcb89/pdfiu">GitHub</a> ·
+        <a href="https://github.com/mfcb89/pdfiu/blob/main/LEEME.md"><span data-lang="es">Manual</span><span data-lang="en">User guide</span></a> ·
+        <a href="https://github.com/mfcb89/pdfiu/blob/main/CHANGELOG.md">Changelog</a> ·
+        <a href="https://github.com/mfcb89/pdfiu/blob/main/SECURITY.md"><span data-lang="es">Seguridad</span><span data-lang="en">Security</span></a>
+      </span>
     </footer>
-  </div>
+  </main>
+
   <script>
     const btn = document.getElementById('toggleLang');
     const shot = document.getElementById('heroShot');
