@@ -934,27 +934,41 @@ class _PageGrid(QListWidget):
         self.setAcceptDrops(True)
         self.viewport().setAcceptDrops(True)
         self.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.setSelectionRectVisible(False)
         self.setSpacing(12)
         self.setWordWrap(True)
         self._press_pos = None
+        self._pressed_item = None
         self._insert_bar = QFrame(self.viewport(), objectName="pageInsertLine")
         self._insert_bar.setFixedWidth(4)
         self._insert_bar.hide()
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
-            self._press_pos = event.position().toPoint()
+            pos = event.position().toPoint()
+            item = self.itemAt(pos)
+            self._press_pos = pos if item is not None else None
+            self._pressed_item = item
+            if item is not None and not (event.modifiers() & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier)):
+                if not item.isSelected():
+                    self.clearSelection()
+                    item.setSelected(True)
+                self.setCurrentItem(item)
+                event.accept()
+                return
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
         if (
             self._press_pos is not None
+            and self._pressed_item is not None
             and (event.buttons() & Qt.MouseButton.LeftButton)
             and (event.position().toPoint() - self._press_pos).manhattanLength() >= QApplication.startDragDistance()
         ):
             selected = sorted(self.row(item) for item in self.selectedItems())
             if selected:
                 self._press_pos = None
+                self._pressed_item = None
                 drag = QDrag(self)
                 mime = QMimeData()
                 mime.setData(self.GRID_MIME, ",".join(map(str, selected)).encode("ascii"))
@@ -965,10 +979,22 @@ class _PageGrid(QListWidget):
                 drag.exec(Qt.DropAction.MoveAction)
                 self._insert_bar.hide()
                 return
+        if self._press_pos is not None:
+            event.accept()
+            return
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
+        if (
+            event.button() == Qt.MouseButton.LeftButton
+            and self._pressed_item is not None
+            and not (event.modifiers() & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier))
+        ):
+            self.clearSelection()
+            self._pressed_item.setSelected(True)
+            self.setCurrentItem(self._pressed_item)
         self._press_pos = None
+        self._pressed_item = None
         super().mouseReleaseEvent(event)
 
     def _drop_target(self, pos):
