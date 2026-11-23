@@ -5,16 +5,16 @@ from html import escape
 from pathlib import Path
 import unicodedata
 
-from PySide6.QtCore import QEvent, QSignalBlocker, Qt, QTimer
-from PySide6.QtGui import QColor
+from PySide6.QtCore import QEvent, QSignalBlocker, QSize, Qt, QTimer
+from PySide6.QtGui import QColor, QIcon, QPixmap, QTransform
 from PySide6.QtWidgets import (
-    QAbstractItemView, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox, QFileDialog,
-    QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget, QListWidgetItem, QSpinBox, QStackedWidget,
+    QAbstractItemView, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox, QFileDialog, QFormLayout,
+    QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget, QListWidgetItem, QSlider, QSpinBox, QStackedWidget,
     QVBoxLayout, QWidget,
 )
 
 from pdf_ops import pdfium_reader, project_signature_box, reader_for, render_page, signature_boxes, signature_plan
-from pdfiu_views import PageView, button
+from pdfiu_views import PageView, as_qimage, button
 from translations import tr
 
 
@@ -866,3 +866,148 @@ class CommandPaletteDialog(QDialog):
             return
         self.chosen = target.data(Qt.ItemDataRole.UserRole)
         self.accept()
+
+
+class SplitDialog(QDialog):
+    def __init__(self, total_pages, default_stem, default_folder, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(tr("Dividir PDF"))
+        self.setMinimumWidth(440)
+        self.total_pages = total_pages
+
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+        self.every = QSpinBox()
+        self.every.setRange(1, max(1, total_pages))
+        self.every.setValue(1)
+        self.every.valueChanged.connect(self.update_preview)
+        form.addRow(tr("Páginas por archivo"), self.every)
+
+        self.prefix = QLineEdit(default_stem)
+        form.addRow(tr("Nombre base"), self.prefix)
+
+        folder_row = QHBoxLayout()
+        self.folder = QLineEdit(str(default_folder))
+        folder_row.addWidget(self.folder, 1)
+        folder_row.addWidget(button("Elegir carpeta…", self.pick_folder))
+        form.addRow(tr("Carpeta de salida"), folder_row)
+        layout.addLayout(form)
+
+        self.preview = QLabel(objectName="muted")
+        self.preview.setWordWrap(True)
+        layout.addWidget(self.preview)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setText(tr("Dividir"))
+        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText(tr("Cancelar"))
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+        self.update_preview()
+
+    def pick_folder(self):
+        chosen = QFileDialog.getExistingDirectory(self, tr("Elegir carpeta de salida"), self.folder.text())
+        if chosen:
+            self.folder.setText(chosen)
+
+    def update_preview(self):
+        step = self.every.value()
+        files = (self.total_pages + step - 1) // step
+        self.preview.setText(
+            tr("Se crearán {0} archivo(s) a partir de {1} página(s).").format(files, self.total_pages)
+        )
+
+
+class OrganizePagesDialog(QDialog):
+    def __init__(self, path, count, password=None, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(tr("Organizar páginas"))
+        self.resize(960, 680)
+        self.path = path
+        self.password = password
+        self.count = count
+        self.rotations = {}
+        self.base_pixmaps = {}
+
+        layout = QVBoxLayout(self)
+        toolbar = QHBoxLayout()
+        toolbar.addWidget(button("Girar 90°", self.rotate_selected, glyph="reload-circle"))
+        toolbar.addWidget(button("Eliminar", self.delete_selected, glyph="delete-bin"))
+        toolbar.addStretch(1)
+        toolbar.addWidget(QLabel(tr("Tamaño")))
+        self.thumb_slider = QSlider(Qt.Orientation.Horizontal)
+        self.thumb_slider.setRange(96, 220)
+        self.thumb_slider.setValue(144)
+        self.thumb_slider.setFixedWidth(130)
+        self.thumb_slider.valueChanged.connect(self.update_thumb_size)
+        toolbar.addWidget(self.thumb_slider)
+        layout.addLayout(toolbar)
+
+        hint = QLabel(tr("Arrastra las miniaturas para reordenar. Usa Ctrl o Mayús para seleccionar varias."), objectName="muted")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        self.grid = QListWidget()
+        self.grid.setViewMode(QListWidget.ViewMode.IconMode)
+        self.grid.setResizeMode(QListWidget.ResizeMode.Adjust)
+        self.grid.setMovement(QListWidget.Movement.Snap)
+        self.grid.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+        self.grid.setDefaultDropAction(Qt.DropAction.MoveAction)
+        self.grid.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.grid.setSpacing(12)
+        self.grid.setWordWrap(True)
+        layout.addWidget(self.grid, 1)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
+        buttons.button(QDialogButtonBox.StandardButton.Save).setText(tr("Aplicar cambios"))
+        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText(tr("Cancelar"))
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+        self.populate_thumbnails()
+        self.update_thumb_size(self.thumb_slider.value())
+
+    def populate_thumbnails(self):
+        with pdfium_reader(self.path, password=self.password) as document:
+            for index in range(self.count):
+                image = render_page(document, index, width=220)
+                pixmap = QPixmap.fromImage(as_qimage(image))
+                self.base_pixmaps[index] = pixmap
+                item = QListWidgetItem(QIcon(pixmap), tr("Página {0}").format(index + 1))
+                item.setData(Qt.ItemDataRole.UserRole, index)
+                item.setTextAlignment(Qt.AlignmentFlag.AlignHCenter)
+                self.grid.addItem(item)
+
+    def update_thumb_size(self, size):
+        self.grid.setIconSize(QSize(size, int(size * 1.35)))
+        self.grid.setGridSize(QSize(size + 28, int(size * 1.35) + 38))
+
+    def rotate_selected(self):
+        for item in self.grid.selectedItems():
+            orig = item.data(Qt.ItemDataRole.UserRole)
+            angle = (self.rotations.get(orig, 0) + 90) % 360
+            self.rotations[orig] = angle
+            base = self.base_pixmaps[orig]
+            rotated = base.transformed(QTransform().rotate(angle), Qt.TransformationMode.SmoothTransformation) if angle else base
+            item.setIcon(QIcon(rotated))
+            suffix = f" ({angle}°)" if angle else ""
+            item.setText(tr("Página {0}").format(orig + 1) + suffix)
+
+    def delete_selected(self):
+        selected = self.grid.selectedItems()
+        if not selected or len(selected) >= self.grid.count():
+            return
+        for item in selected:
+            self.grid.takeItem(self.grid.row(item))
+
+    def result_plan(self):
+        order = []
+        rotations = {}
+        for row in range(self.grid.count()):
+            orig = self.grid.item(row).data(Qt.ItemDataRole.UserRole)
+            order.append(orig)
+            angle = self.rotations.get(orig, 0)
+            if angle:
+                rotations[row] = angle
+        return order, rotations

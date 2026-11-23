@@ -1,5 +1,5 @@
 {
-  "version": "0.11.0",
+  "version": "0.12.0",
   "url": "https://github.com/mfcb89/pdfiu/releases",
-  "notes": "Panel de anotaciones con tarjetas y filtro, paleta de comandos (Ctrl+K), filtro en marcadores, tema oscuro (Claro/Oscuro/Sistema) y registro local de errores."
+  "notes": "Vista de doble página (Ctrl+2), pestañas desacoplables en nuevas ventanas, barra de búsqueda compacta (Ctrl+F), organizar páginas en cuadrícula, dividir PDF, soporte de certificados ECDSA en Windows y tema oscuro mejorado."
 }

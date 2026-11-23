@@ -4,7 +4,12 @@
 
 **Español** · [English](README.en.md)
 
-Lector y editor de PDF de código abierto creado por **mfcb89**, pensado como alternativa ligera y 100% local a los lectores propietarios pesados. Abre, organiza, edita, firma, mide planos y convierte documentos desde una aplicación de escritorio sin cuentas, sin nube y sin telemetría. La interfaz y la visita guiada están disponibles en español e inglés.
+![Versión 0.12.0](https://img.shields.io/badge/version-0.12.0-2f7d6d?style=flat-square)
+![Licencia MIT](https://img.shields.io/badge/license-MIT-182a3d?style=flat-square)
+![Windows x64](https://img.shields.io/badge/Windows-x64-294459?style=flat-square)
+![100% local](https://img.shields.io/badge/privacidad-100%25%20local%20%C2%B7%20sin%20cuenta-317f72?style=flat-square)
+
+Lector y editor de PDF de código abierto creado por **mfcb89**, pensado como alternativa ligera y 100% local a los lectores propietarios pesados. Abre, organiza, edita, firma, mide planos y convierte documentos desde una aplicación de escritorio sin cuentas, sin nube y sin telemetría. La interfaz (con tema claro y oscuro) y la visita guiada están disponibles en español e inglés.
 
 ![PDFiu en español con el documento de bienvenida, miniaturas y herramientas](docs/pdfiu-es.png)
 

@@ -4,7 +4,12 @@
 
 [Español](README.md) · **English**
 
-An open-source PDF reader and editor created by **mfcb89**, built as a lightweight, 100% local alternative to heavy proprietary PDF readers. Open, organize, edit, sign, measure drawings, and convert documents from a desktop app with no account, no cloud, and no telemetry. The interface and guided tour are available in Spanish and English.
+![Version 0.12.0](https://img.shields.io/badge/version-0.12.0-2f7d6d?style=flat-square)
+![MIT License](https://img.shields.io/badge/license-MIT-182a3d?style=flat-square)
+![Windows x64](https://img.shields.io/badge/Windows-x64-294459?style=flat-square)
+![100% Local](https://img.shields.io/badge/privacy-100%25%20local%20%C2%B7%20no%20account-317f72?style=flat-square)
+
+An open-source PDF reader and editor created by **mfcb89**, built as a lightweight, 100% local alternative to heavy proprietary PDF readers. Open, organize, edit, sign, measure drawings, and convert documents from a desktop app with no account, no cloud, and no telemetry. The interface (with light and dark themes) and guided tour are available in Spanish and English.
 
 ![PDFiu in English showing the welcome document, thumbnails, and tools](docs/pdfiu-en.png)
 

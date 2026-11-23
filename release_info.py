@@ -9,7 +9,7 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 
 APP_NAME = "PDFiu"
-APP_VERSION = "0.11.0"
+APP_VERSION = "0.12.0"
 DEFAULT_UPDATE_CHANNEL = "https://raw.githubusercontent.com/mfcb89/pdfiu/main/updates.json"
 _VERSION_RE = re.compile(r"[0-9]{1,6}(?:\.[0-9]{1,6}){2}")
 _SHA256_RE = re.compile(r"[0-9a-fA-F]{64}")

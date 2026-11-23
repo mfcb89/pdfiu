@@ -5,6 +5,22 @@ El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/
 
 ## [Sin publicar] / [Unreleased]
 
+## [0.12.0] - 2026-11-23
+
+### Añadido / Added
+- **Vista de doble página** (`Vista → Doble página`, botón de tamaño del lateral y atajo `Ctrl+2`).
+- **Pestañas de documentos** encima del visor con botón de cierre Fluent UI, indicador `•` de cambios sin guardar, menú contextual y **arrastrar pestaña fuera para abrirla en una nueva ventana**.
+- **Barra de búsqueda superior compacta** (`Ctrl+F`) con contador en vivo (`3 / 16`), salto rápido (`↑`/`↓`), botón de tildes y acceso al panel completo.
+- **Organizar páginas en cuadrícula** (miniaturas arrastrables con deslizador de tamaño, giro de 90° y borrado en lote).
+- **Dividir PDF** cada *N* páginas con vista previa del número de archivos a crear.
+- **Soporte de certificados ECDSA (P-256 / P-384)** además de RSA en el almacén de Windows (`windows_cert.ps1` y `pdf_sign.py`).
+- Pruebas automáticas reales de firma `.pfx` (RSA y ECDSA), censura irreversible, compresión, división de PDF y arranque de interfaz (26 tests en total).
+- Página web estática en [docs/index.html](docs/index.html) lista para GitHub Pages con información del modelo de distribución y sección de cumplimiento LGPLv3.
+
+### Cambiado / Changed
+- Todos los iconos SVG se adaptan automáticamente al **tema oscuro** y se actualizan en vivo al cambiar de tema en Preferencias.
+- Guardado directo (`Ctrl+S`) sin confirmación repetitiva sobre archivos ya guardados (manteniendo la protección de originales firmados).
+
 ## [0.11.0] - 2026-11-23
 
 ### Añadido / Added

@@ -35,7 +35,7 @@ from pdf_ops import (
     has_signed_fields, has_xfa, images_to_pdf, insert_pages,
     merge, ocr_document, page_range, page_text, pages_per_sheet, pdf_has_signatures, pdfium_reader, project_signature_box, protect_copy, reader_for,
     redact_copy, redact_searchable_copy, remove_review_annotation, render_page, render_page_tile, replace_text_block, review_annotations, search_advanced_document,
-    signature_boxes, signature_plan, signature_value, signature_widgets, surface_records, text_block_at, unlock_pdf,
+    signature_boxes, signature_plan, signature_value, signature_widgets, split_pdf, surface_records, text_block_at, unlock_pdf,
     validate_signature_box, workspace_batch_copies,
 )
 from pdfiu_ui import ANNOTATION_CARD_ROLE, HeaderEditor, PageNavigator, PanelRail, SEARCH_EXCERPT_ROLE, STYLE, SearchResultDelegate, TourSpotlight, apply_theme, brand_icon, icon, signature_details_html, startup_screen, text_line_boxes
@@ -55,7 +55,10 @@ from pdfiu_views import (
     SEARCH_PAGE_COUNT_ROLE, WorkDocument, WorkspaceList, action_menu, as_qimage, button,
     check_cancellation, file_size_label, icon_button, search_result_item,
 )
-from pdfiu_dialogs import BatchDialog, CertificateDialog, CommandPaletteDialog, CompressionPreview, MergeDialog, RevisionComparison
+from pdfiu_dialogs import (
+    BatchDialog, CertificateDialog, CommandPaletteDialog, CompressionPreview, MergeDialog,
+    OrganizePagesDialog, RevisionComparison, SplitDialog,
+)
 
 
 class PDFiu(QMainWindow):
@@ -293,6 +296,8 @@ class PDFiu(QMainWindow):
         groups = (
             (tr("Documento"), "document", (self.merge_btn, layout_tool, export_tool, self.ocr_btn,
                            button("Buscar texto", self.open_search, glyph="search"), self.pan_btn,
+                           button("Organizar páginas…", self.organize_pages_grid, glyph="view-columns"),
+                           button("Dividir PDF…", self.split_current_pdf, glyph="extract"),
                            button("Extraer páginas…", self.extract_range, glyph="extract"),
                            button("Comprimir copia…", self.compress_pdf, glyph="compress"),
                            recipe)),
@@ -4479,6 +4484,47 @@ class PDFiu(QMainWindow):
                 self.note(tr("Página extraída."))
             except Exception as error:
                 self.error(error)
+
+    def organize_pages_grid(self):
+        if self.path is None or self.job is not None or not self.editable():
+            return
+        dialog = OrganizePagesDialog(self.path, self.count, password=self.document_password, parent=self)
+        if not dialog.exec():
+            return
+        order, rotations = dialog.result_plan()
+        if order == list(range(self.count)) and not rotations:
+            return
+        self.apply_edit(
+            tr("Organizar páginas"),
+            lambda source, destination: edit_pages(source, destination, order, rotations=rotations),
+            page=0,
+        )
+
+    def split_current_pdf(self):
+        if self.path is None or self.job is not None:
+            return
+        folder = self.saved_path.parent if self.saved_path else Path(self.preferences.value("archivos/ultima_carpeta", str(Path.home())))
+        dialog = SplitDialog(self.count, Path(self.name).stem, folder, self)
+        if not dialog.exec():
+            return
+        out_dir = Path(dialog.folder.text().strip())
+        if not str(out_dir):
+            return
+        every = dialog.every.value()
+        stem = dialog.prefix.text().strip() or Path(self.name).stem
+        source = self.path
+        password = self.document_password
+
+        def done(created):
+            self.note(tr("PDF dividido en {0} archivo(s).").format(len(created)))
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(out_dir)))
+
+        self.start_job(
+            tr("Dividiendo PDF…"),
+            lambda progress: split_pdf(source, out_dir, every=every, stem=stem, password=password, progress=progress),
+            done,
+            progress_label=tr("Creando archivo"),
+        )
 
     def extract_range(self):
         if not self.editable():

@@ -699,16 +699,48 @@ def merge(paths, destination, *, with_index=False, names=None, remove_signatures
     save_writer(writer, destination)
 
 
-def edit_pages(source, destination, order, rotate_index=None):
+def edit_pages(source, destination, order, rotate_index=None, *, rotations=None):
     reader = reader_for(source)
     check_editable(reader)
     writer = PdfWriter()
     writer.append(reader, pages=order, import_outline=True)
     if rotate_index is not None:
         writer.pages[rotate_index].rotate(90)
+    if rotations:
+        for index, angle in rotations.items():
+            if angle % 360:
+                writer.pages[index].rotate(angle % 360)
     if reader.metadata:
         writer.add_metadata({str(key): str(value) for key, value in reader.metadata.items() if value is not None})
     save_writer(writer, destination)
+
+
+def split_pdf(source, destination_dir, *, every=1, stem=None, password=None, progress=None):
+    if every < 1:
+        raise ValueError(tr("Indica al menos 1 página por archivo."))
+    reader = reader_for(source, password=password)
+    total = len(reader.pages)
+    if total == 0:
+        raise ValueError(tr("El documento no tiene páginas."))
+    destination_dir = Path(destination_dir)
+    destination_dir.mkdir(parents=True, exist_ok=True)
+    base = stem or Path(source).stem
+    parts = [list(range(start, min(start + every, total))) for start in range(0, total, every)]
+    digits = max(3, len(str(len(parts))))
+    created = []
+    for idx, pages in enumerate(parts, 1):
+        if progress:
+            progress(idx, len(parts))
+        target = destination_dir / f"{base} - {tr('parte')} {idx:0{digits}d}.pdf"
+        serial = 2
+        while target.exists():
+            target = destination_dir / f"{base} - {tr('parte')} {idx:0{digits}d} ({serial}).pdf"
+            serial += 1
+        writer = PdfWriter()
+        writer.append(reader, pages=pages, import_outline=False)
+        save_writer(writer, target)
+        created.append(target)
+    return created
 
 
 def pages_per_sheet(source, destination, paper, grid, progress):

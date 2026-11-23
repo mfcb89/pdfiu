@@ -131,6 +131,26 @@ class PdfOpsTests(unittest.TestCase):
             self.assertGreater(before, after)
             self.assertTrue(compressed.is_file())
 
+    def test_split_pdf_and_edit_pages_rotations(self):
+        from pypdf import PdfReader
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            src = root / "multi.pdf"
+            _make_text_pdf(src, ["Hoja 1", "Hoja 2", "Hoja 3", "Hoja 4", "Hoja 5"])
+
+            parts_dir = root / "parts"
+            created = self.pdf_ops.split_pdf(src, parts_dir, every=2, stem="dossier")
+            self.assertEqual(len(created), 3)
+            self.assertEqual([len(PdfReader(str(p)).pages) for p in created], [2, 2, 1])
+
+            reordered = root / "reordered.pdf"
+            self.pdf_ops.edit_pages(src, reordered, [4, 0, 2], rotations={0: 90, 2: 180})
+            reader = PdfReader(str(reordered))
+            self.assertEqual(len(reader.pages), 3)
+            self.assertEqual(reader.pages[0].rotation % 360, 90)
+            self.assertEqual(reader.pages[2].rotation % 360, 180)
+
 
 if __name__ == "__main__":
     unittest.main()
