@@ -758,6 +758,10 @@ class PDFiu(QMainWindow):
             (tr("Ajustar página"), self.view.fit_page),
             (tr("Ajustar ancho"), self.view.fit_width),
         ))
+        size_menu.menu().addSeparator()
+        self.size_two_page_action = size_menu.menu().addAction(tr("Doble página"))
+        self.size_two_page_action.setCheckable(True)
+        self.size_two_page_action.toggled.connect(self.toggle_two_page)
         self.zoom_level = QLineEdit("100 %", objectName="zoomLevel")
         self.zoom_level.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.zoom_level.setFixedWidth(40)
@@ -896,6 +900,7 @@ class PDFiu(QMainWindow):
         view = bar.addMenu(tr("&Vista"))
         self.menu_two_page = view.addAction(tr("Doble página"))
         self.menu_two_page.setCheckable(True)
+        self.menu_two_page.setShortcut(QKeySequence("Ctrl+2"))
         self.menu_two_page.toggled.connect(self.toggle_two_page)
         add(view, tr("Enfocar documento"), self.toggle_focus, None, "F9")
         add(view, tr("Pantalla completa"), self.toggle_fullscreen, key.FullScreen, "F11")
@@ -2160,8 +2165,9 @@ class PDFiu(QMainWindow):
     def toggle_two_page(self, enabled=None):
         if enabled is None:
             enabled = not self.view.two_page
-        with QSignalBlocker(self.menu_two_page):
-            self.menu_two_page.setChecked(bool(enabled))
+        for action in (self.menu_two_page, self.size_two_page_action):
+            with QSignalBlocker(action):
+                action.setChecked(bool(enabled))
         self.view.set_two_page(bool(enabled))
 
     def toggle_fullscreen(self):

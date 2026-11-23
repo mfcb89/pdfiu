@@ -55,6 +55,7 @@ Guía práctica de uso de **PDFiu**. Todas las operaciones se ejecutan en tu equ
 | Preferencias | `Ctrl+,` | `⌘+,` |
 | Deshacer / Rehacer | `Ctrl+Z` / `Ctrl+Y` | `⌘+Z` / `⌘+Y` |
 | Enfocar / Pantalla completa | `F9` / `F11` | `F9` / `F11` |
+| Doble página | `Ctrl+2` | `⌘+2` |
 | Cerrar PDF | `Ctrl+W` | `⌘+W` |
 | Desplazar con zoom | Mantener `Espacio` + arrastrar | Mantener `Espacio` + arrastrar |
 
