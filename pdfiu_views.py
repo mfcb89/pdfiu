@@ -12,7 +12,7 @@ from PySide6.QtGui import QColor, QDrag, QImage, QKeySequence, QPainterPath, QPe
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QComboBox, QFrame, QGraphicsDropShadowEffect, QGraphicsScene, QGraphicsView,
     QLineEdit, QListWidget, QListWidgetItem, QMenu, QPlainTextEdit, QPushButton, QStyle, QStyleOptionViewItem,
-    QStyledItemDelegate,
+    QStyledItemDelegate, QTabBar,
 )
 
 from pdf_ops import Coordinates, OperationCancelled, document_text, page_text, pdfium_reader, render_page, render_page_tile
@@ -1229,3 +1229,53 @@ class WorkspaceList(QListWidget):
         super().mouseReleaseEvent(event)
         if not indicator.contains(point):
             self.open_requested.emit(item)
+
+
+class DocumentTabBar(QTabBar):
+    """Tab bar that supports tearing off a tab into a new window by dragging it outside."""
+
+    tab_detached = Signal(int, QPoint)
+
+    def __init__(self, parent=None, *, objectName=None):
+        super().__init__(parent)
+        if objectName:
+            self.setObjectName(objectName)
+        self._drag_index = -1
+        self._drag_origin = QPoint()
+        self._detaching = False
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            pos = event.position().toPoint()
+            self._drag_index = self.tabAt(pos)
+            self._drag_origin = pos
+            self._detaching = False
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self._drag_index >= 0 and (event.buttons() & Qt.MouseButton.LeftButton):
+            pos = event.position().toPoint()
+            outside_y = pos.y() < -32 or pos.y() > self.height() + 32
+            outside_x = pos.x() < -48 or pos.x() > self.width() + 48
+            if outside_y or outside_x:
+                if not self._detaching:
+                    self._detaching = True
+                    self.setCursor(Qt.CursorShape.DragMoveCursor)
+                return
+            if self._detaching:
+                self._detaching = False
+                self.unsetCursor()
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        index = self._drag_index
+        detaching = self._detaching
+        self._drag_index = -1
+        self._detaching = False
+        if detaching:
+            self.unsetCursor()
+            super().mouseReleaseEvent(event)
+            if index >= 0 and index < self.count():
+                self.tab_detached.emit(index, event.globalPosition().toPoint())
+            return
+        super().mouseReleaseEvent(event)

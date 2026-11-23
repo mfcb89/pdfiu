@@ -51,7 +51,7 @@ from pdf_print_dialog import PrintDialog
 from pdf_archive import PROFILES, archive_tools, export_archive
 from app_logging import log_directory, setup_logging
 from pdfiu_views import (
-    BookmarkRows, ContinuousPageView, Job, MEASURE_UNITS, PageCalibration, PageList, PageView,
+    BookmarkRows, ContinuousPageView, DocumentTabBar, Job, MEASURE_UNITS, PageCalibration, PageList, PageView,
     SEARCH_PAGE_COUNT_ROLE, WorkDocument, WorkspaceList, action_menu, as_qimage, button,
     check_cancellation, file_size_label, icon_button, search_result_item,
 )
@@ -484,15 +484,15 @@ class PDFiu(QMainWindow):
         tab_strip_layout = QHBoxLayout(self.doc_tab_strip)
         tab_strip_layout.setContentsMargins(8, 2, 8, 2)
         tab_strip_layout.setSpacing(4)
-        self.doc_tabs = QTabBar()
+        self.doc_tabs = DocumentTabBar(objectName="docTabs")
         self.doc_tabs.setDocumentMode(True)
         self.doc_tabs.setExpanding(False)
-        self.doc_tabs.setTabsClosable(True)
+        self.doc_tabs.setMovable(True)
         self.doc_tabs.setElideMode(Qt.TextElideMode.ElideMiddle)
         self.doc_tabs.setUsesScrollButtons(True)
         self.doc_tabs.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.doc_tabs.currentChanged.connect(self.activate_doc_tab)
-        self.doc_tabs.tabCloseRequested.connect(self.close_doc_tab)
+        self.doc_tabs.tab_detached.connect(self.detach_doc_tab)
         self.doc_tabs.customContextMenuRequested.connect(self.doc_tab_context)
         tab_strip_layout.addWidget(self.doc_tabs, 1)
         tab_strip_layout.addWidget(icon_button(tr("Abrir PDF"), "plus", self.open_dialog, size=26, glyph_size=16))
@@ -3449,6 +3449,15 @@ class PDFiu(QMainWindow):
                 idx = self.doc_tabs.addTab(label)
                 self.doc_tabs.setTabData(idx, key)
                 self.doc_tabs.setTabToolTip(idx, str(state.saved_path or state.path))
+                close_btn = QPushButton(objectName="tabClose")
+                close_btn.setFixedSize(18, 18)
+                close_btn.setProperty("iconGlyph", ("close", 11, False, False))
+                close_btn.setIcon(icon("close", 11))
+                close_btn.setIconSize(QSize(11, 11))
+                close_btn.setToolTip(tr("Cerrar pestaña"))
+                close_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+                close_btn.clicked.connect(lambda _=False, k=key: self.close_doc_tab_by_key(k))
+                self.doc_tabs.setTabButton(idx, QTabBar.ButtonPosition.RightSide, close_btn)
                 if is_current:
                     active_index = idx
             if active_index >= 0:
@@ -3475,10 +3484,23 @@ class PDFiu(QMainWindow):
     def close_doc_tab(self, index):
         if index < 0 or self.job is not None:
             return
-        key = self.doc_tabs.tabData(index)
+        self.close_doc_tab_by_key(self.doc_tabs.tabData(index))
+
+    def close_doc_tab_by_key(self, key):
+        if self.job is not None:
+            return
         item = self._work_item_for_key(key)
         if item is not None:
             self.close_work_document(item)
+            self.sync_doc_tabs()
+
+    def detach_doc_tab(self, index, global_pos):
+        if index < 0 or self.job is not None:
+            return
+        key = self.doc_tabs.tabData(index)
+        item = self._work_item_for_key(key)
+        if item is not None:
+            self.move_to_new_window(item, position=global_pos - QPoint(120, 28))
             self.sync_doc_tabs()
 
     def doc_tab_context(self, position):
@@ -3568,7 +3590,7 @@ class PDFiu(QMainWindow):
         for window in list(self.document_views.pop(key, {})):
             window.close()
 
-    def move_to_new_window(self, item=None):
+    def move_to_new_window(self, item=None, *, position=None):
         if self.job is not None:
             return
         if item is not None:
@@ -3607,7 +3629,10 @@ class PDFiu(QMainWindow):
             self.error(error)
             return
         self.show_new_window(window)
+        if position is not None:
+            window.move(position)
         self.remove_active_document()
+        self.sync_doc_tabs()
 
     def close_work_document(self, item=None):
         if self.job is not None:

@@ -619,6 +619,17 @@ QWidget#readerZoomGroup { background: transparent; }
 QFrame#shellBar { border-bottom: 1px solid #e0e8e3; }
 QFrame#footer { border-top: 1px solid #e0e8e3; }
 QFrame#docTabStrip { background: #f3f6f4; border-bottom: 1px solid #dce6e1; }
+QTabBar#docTabs { background: transparent; border: 0; }
+QTabBar#docTabs::tab {
+    background: transparent; color: #516472; border: 1px solid transparent; border-radius: 7px;
+    padding: 5px 8px 5px 11px; margin: 3px 2px; max-width: 240px;
+}
+QTabBar#docTabs::tab:hover:!selected { background: #e8f0ec; color: #182a3d; }
+QTabBar#docTabs::tab:selected { background: #ffffff; color: #182a3d; border-color: #d4e0da; font-weight: 600; }
+QPushButton#tabClose {
+    padding: 0; min-height: 0; border: 0; border-radius: 9px; background: transparent;
+}
+QPushButton#tabClose:hover { background: #dbe6e0; }
 QFrame#findBar { background: #f8faf9; border-bottom: 1px solid #dce6e1; }
 QFrame#sidebar, QFrame#navigationOverview, QWidget#workspaceFiles, QWidget#workspaceNavigation { background: #f3f6f4; }
 QFrame#navigationOverview { border-bottom: 1px solid #dce6e1; }
@@ -757,6 +768,17 @@ DARK_STYLE = """
 QMainWindow, QDialog, QWidget { background: #161b22; color: #e6edf3; font-family: "Segoe UI", "Helvetica Neue", Arial; font-size: 13px; }
 QFrame#topbar, QFrame#shellBar, QFrame#readerFooter, QFrame#footer, QFrame#statusBar { background: #1c222b; border-bottom: 1px solid #2b3440; }
 QFrame#docTabStrip { background: #181e26; border-bottom: 1px solid #2b3440; }
+QTabBar#docTabs { background: transparent; border: 0; }
+QTabBar#docTabs::tab {
+    background: transparent; color: #8b9bb0; border: 1px solid transparent; border-radius: 7px;
+    padding: 5px 8px 5px 11px; margin: 3px 2px; max-width: 240px;
+}
+QTabBar#docTabs::tab:hover:!selected { background: #222a35; color: #e6edf3; }
+QTabBar#docTabs::tab:selected { background: #242d39; color: #f0f6fc; border-color: #364354; font-weight: 600; }
+QPushButton#tabClose {
+    padding: 0; min-height: 0; border: 0; border-radius: 9px; background: transparent;
+}
+QPushButton#tabClose:hover { background: #334052; }
 QFrame#findBar { background: #1c222b; border-bottom: 1px solid #2b3440; }
 QFrame#readerFooter, QFrame#footer, QFrame#statusBar { border-top: 1px solid #2b3440; border-bottom: 0; }
 QFrame#rail, QFrame#navigationRail { background: #181e26; border-right: 1px solid #2b3440; }
