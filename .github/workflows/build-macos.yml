@@ -1,0 +1,72 @@
+name: Build macOS DMG (Apple Silicon)
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-macos-arm64:
+    runs-on: macos-14
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Tesseract via Homebrew
+        run: |
+          brew install tesseract pkg-config
+
+      - name: Download OCR models (Spanish & English)
+        run: |
+          mkdir -p runtime/tessdata
+          curl -fsSL https://github.com/tesseract-ocr/tessdata_fast/raw/main/spa.traineddata -o runtime/tessdata/spa.traineddata
+          curl -fsSL https://github.com/tesseract-ocr/tessdata_fast/raw/main/eng.traineddata -o runtime/tessdata/eng.traineddata
+
+      - name: Install Python dependencies
+        env:
+          PKG_CONFIG_PATH: /opt/homebrew/lib/pkgconfig
+          CPPFLAGS: -I/opt/homebrew/include
+          LDFLAGS: -L/opt/homebrew/lib
+        run: |
+          python -m pip install --upgrade pip wheel setuptools cython
+          python -m pip install -r requirements.txt pyinstaller
+
+      - name: Run unit tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          python -m unittest discover -s tests -v
+
+      - name: Build PDFiu.app (arm64)
+        run: |
+          python packaging/build_app.py \
+            --tessdata runtime/tessdata \
+            --output build/macos \
+            --arch arm64 \
+            --bundle-id com.mfcb89.pdfiu
+
+      - name: Create DMG installer
+        run: |
+          VERSION=$(python -c "import release_info; print(release_info.APP_VERSION)")
+          mkdir -p build/dmg-staging build/dmg
+          cp -R build/macos/dist/PDFiu.app build/dmg-staging/
+          ln -s /Applications build/dmg-staging/Applications
+          hdiutil create \
+            -volname "PDFiu ${VERSION}" \
+            -srcfolder build/dmg-staging \
+            -ov -format UDZO \
+            "build/dmg/PDFiu-${VERSION}-macOS-arm64.dmg"
+          ls -lh build/dmg/
+
+      - name: Upload macOS DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PDFiu-macOS-arm64-dmg
+          path: build/dmg/*.dmg
+          retention-days: 30
