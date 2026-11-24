@@ -618,7 +618,7 @@ class HeaderEditor(QWidget):
 
 
 STYLE = """
-QWidget { background: #fff; color: #182a3d; font-family: 'Segoe UI'; font-size: 13px; }
+QWidget { background: #fff; color: #182a3d; font-family: "Segoe UI", "Helvetica Neue", Arial; font-size: 13px; }
 QMainWindow, QFrame#shellBar, QFrame#footer { background: #fff; }
 QFrame#navigationRail { background: #fafbf9; border: 0; }
 QFrame#navigationRail QScrollArea#railScroll,
@@ -732,7 +732,7 @@ QFrame#dialogCard[selected="true"] { background: #edf7f3; border: 1.5px solid #3
 QFrame#dialogCard:hover { border-color: #9ec5ba; }
 QGroupBox { border: 1px solid #dce6e1; border-radius: 9px; margin-top: 12px; padding: 12px 10px 10px; font-weight: 600; }
 QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 5px; color: #182a3d; }
-QDialogButtonBox QPushButton, QMessageBox QPushButton { min-width: 86px; padding: 7px 15px; }
+QDialogButtonBox QPushButton, QMessageBox QPushButton { padding: 7px 18px; }
 QMessageBox QLabel#qt_msgbox_label { font-size: 14px; font-weight: 600; color: #182a3d; }
 QSlider::groove:horizontal { height: 4px; background: #d6e2dc; border-radius: 2px; }
 QSlider::handle:horizontal { width: 14px; height: 14px; margin: -5px 0; border-radius: 7px; background: #317f72; }
@@ -971,7 +971,7 @@ QFrame#dialogCard[selected="true"] { background: #19312d; border: 1.5px solid #4
 QFrame#dialogCard:hover { border-color: #46586e; }
 QGroupBox { border: 1px solid #2b3440; border-radius: 9px; margin-top: 12px; padding: 12px 10px 10px; font-weight: 600; color: #e6edf3; }
 QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 5px; color: #e6edf3; }
-QDialogButtonBox QPushButton, QMessageBox QPushButton { min-width: 86px; padding: 7px 15px; }
+QDialogButtonBox QPushButton, QMessageBox QPushButton { padding: 7px 18px; }
 QMessageBox QLabel#qt_msgbox_label { font-size: 14px; font-weight: 600; color: #f0f6fc; }
 QSlider::groove:horizontal { height: 4px; background: #2b3440; border-radius: 2px; }
 QSlider::handle:horizontal { width: 14px; height: 14px; margin: -5px 0; border-radius: 7px; background: #4fb39d; }

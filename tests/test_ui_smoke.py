@@ -87,6 +87,38 @@ class UiSmokeTests(unittest.TestCase):
         finally:
             dialog.close()
 
+    def test_message_box_buttons_are_not_clipped(self):
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtWidgets import QApplication, QMessageBox, QPushButton
+        import pdfiu_ui
+
+        app = QApplication.instance() or QApplication([])
+        app.setStyle("Fusion")
+        for theme in ("light", "dark"):
+            pdfiu_ui.apply_theme(app, theme)
+            dialog = QMessageBox()
+            try:
+                dialog.setWindowTitle("Guardar copia censurada")
+                dialog.setText("Se borrarán las zonas marcadas. Las demás páginas conservarán el texto y los vectores.")
+                dialog.setInformativeText(
+                    "Solo las páginas con marcas se convierten en imágenes. Puedes recuperar su texto con OCR."
+                )
+                dialog.addButton("Censurar sin OCR", QMessageBox.ButtonRole.ActionRole)
+                dialog.addButton("Con texto seleccionable (OCR)", QMessageBox.ButtonRole.AcceptRole)
+                dialog.addButton(QMessageBox.StandardButton.Cancel).setText("Cancelar")
+                dialog.show()
+                app.processEvents()
+                buttons = [b for b in dialog.findChildren(QPushButton) if b.text()]
+                self.assertEqual(len(buttons), 3)
+                for btn in buttons:
+                    self.assertGreaterEqual(
+                        btn.width(),
+                        btn.sizeHint().width(),
+                        f"Button {btn.text()!r} clipped in {theme} theme ({btn.width()} < {btn.sizeHint().width()})",
+                    )
+            finally:
+                dialog.close()
+
 
 if __name__ == "__main__":
     unittest.main()

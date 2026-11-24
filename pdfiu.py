@@ -212,7 +212,7 @@ class PDFiu(QMainWindow):
 
         tools = QFrame(objectName="toolPanel")
         self.tools = tools
-        tools.setFixedWidth(226)
+        tools.setFixedWidth(260)
         tool_layout = QVBoxLayout(tools)
         tool_layout.setContentsMargins(14, 15, 14, 12)
         tool_layout.setSpacing(9)
