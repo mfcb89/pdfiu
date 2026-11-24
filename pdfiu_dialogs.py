@@ -1237,12 +1237,13 @@ class CompressDialog(QDialog):
     def __init__(self, parent, previous=None):
         super().__init__(parent)
         self.setWindowTitle(tr("Comprimir PDF"))
-        self.setMinimumWidth(480)
+        self.setMinimumWidth(540)
         self._applying_preset = False
         self._custom = False
 
         layout = QVBoxLayout(self)
-        layout.setSpacing(10)
+        layout.setContentsMargins(22, 20, 22, 18)
+        layout.setSpacing(12)
 
         intro = QLabel(tr("Elige el nivel de compresión. El texto y las líneas vectoriales siempre se conservan nítidos."), objectName="muted")
         intro.setWordWrap(True)
@@ -1250,35 +1251,37 @@ class CompressDialog(QDialog):
 
         self.preset_group = QButtonGroup(self)
         self.preset_buttons = {}
+        self.preset_cards = {}
         for index, (key, title, subtitle, _) in enumerate(self.PRESETS):
-            card = QFrame()
-            card.setFrameShape(QFrame.Shape.StyledPanel)
+            card = QFrame(objectName="dialogCard")
+            card.setCursor(Qt.CursorShape.PointingHandCursor)
+            card.mousePressEvent = lambda event, idx=index: self.apply_preset_index(idx)
             card_layout = QVBoxLayout(card)
-            card_layout.setContentsMargins(12, 8, 12, 8)
-            card_layout.setSpacing(2)
+            card_layout.setContentsMargins(14, 11, 14, 11)
+            card_layout.setSpacing(3)
             radio = QRadioButton(tr(title))
             font = radio.font()
             font.setBold(True)
             radio.setFont(font)
             desc = QLabel(tr(subtitle), objectName="muted")
             desc.setWordWrap(True)
-            desc.setContentsMargins(20, 0, 0, 0)
+            desc.setContentsMargins(24, 0, 0, 0)
             card_layout.addWidget(radio)
             card_layout.addWidget(desc)
             self.preset_group.addButton(radio, index)
             self.preset_buttons[key] = radio
+            self.preset_cards[key] = card
             layout.addWidget(card)
 
         self.advanced_toggle = QPushButton("▸ " + tr("Opciones avanzadas"))
-        self.advanced_toggle.setFlat(True)
+        self.advanced_toggle.setProperty("role", "flat")
         self.advanced_toggle.setCheckable(True)
-        self.advanced_toggle.setStyleSheet("text-align: left; padding: 4px 2px;")
         layout.addWidget(self.advanced_toggle)
 
-        self.advanced_box = QFrame()
-        self.advanced_box.setFrameShape(QFrame.Shape.StyledPanel)
+        self.advanced_box = QFrame(objectName="dialogCard")
         adv_layout = QFormLayout(self.advanced_box)
-        adv_layout.setContentsMargins(12, 10, 12, 10)
+        adv_layout.setContentsMargins(16, 14, 16, 14)
+        adv_layout.setSpacing(10)
 
         self.lossless = QCheckBox(tr("Solo estructura (sin pérdida en imágenes)"))
         self.quality = QSpinBox()
@@ -1308,6 +1311,7 @@ class CompressDialog(QDialog):
 
         choices = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
         proceed = choices.addButton(tr("Comprimir ahora"), QDialogButtonBox.ButtonRole.AcceptRole)
+        proceed.setObjectName("primary")
         proceed.setDefault(True)
         estimate = choices.addButton(tr("Estimar tamaño"), QDialogButtonBox.ButtonRole.ActionRole)
         estimate.clicked.connect(lambda: self.done(self.ESTIMATE_CODE))
@@ -1327,17 +1331,24 @@ class CompressDialog(QDialog):
         if isinstance(previous, dict):
             self.restore_settings(previous)
 
+    def _refresh_card_highlights(self, active_key):
+        for key, card in self.preset_cards.items():
+            card.setProperty("selected", key == active_key)
+            card.style().unpolish(card)
+            card.style().polish(card)
+
     def toggle_advanced(self, checked):
         self.advanced_toggle.setText(("▾ " if checked else "▸ ") + tr("Opciones avanzadas"))
         self.advanced_box.setVisible(checked)
         self.adjustSize()
 
     def apply_preset_index(self, index):
-        _, _, _, values = self.PRESETS[index]
+        key, _, _, values = self.PRESETS[index]
         self._applying_preset = True
         try:
             self._custom = False
-            self.preset_buttons[self.PRESETS[index][0]].setChecked(True)
+            self.preset_buttons[key].setChecked(True)
+            self._refresh_card_highlights(key)
             self.lossless.setChecked(values["lossless"])
             self.quality.setValue(values["quality"])
             self.downsample.setChecked(values["downsample"])
@@ -1359,6 +1370,7 @@ class CompressDialog(QDialog):
         self._applying_preset = True
         try:
             self._custom = True
+            self._refresh_card_highlights(None)
             self.lossless.setChecked(bool(saved.get("lossless", False)))
             self.quality.setValue(int(saved.get("quality", 82)))
             self.downsample.setChecked(bool(saved.get("downsample", True)))
@@ -1384,6 +1396,7 @@ class CompressDialog(QDialog):
         if self._applying_preset:
             return
         self._custom = True
+        self._refresh_card_highlights(None)
         self._sync_enabled()
 
     def current_settings(self):

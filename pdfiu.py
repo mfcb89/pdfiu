@@ -974,7 +974,10 @@ class PDFiu(QMainWindow):
             return
         dialog = QDialog(self)
         dialog.setWindowTitle(tr("Crear PDF en blanco…"))
+        dialog.setMinimumWidth(420)
         layout = QFormLayout(dialog)
+        layout.setContentsMargins(20, 18, 20, 18)
+        layout.setSpacing(10)
         paper = QComboBox()
         for label, size in (("A4", QPageSize.PageSizeId.A4), ("A3", QPageSize.PageSizeId.A3),
                             (tr("Carta"), QPageSize.PageSizeId.Letter)):
@@ -1331,7 +1334,10 @@ class PDFiu(QMainWindow):
     def show_preferences(self):
         dialog = QDialog(self)
         dialog.setWindowTitle(tr("Preferencias"))
+        dialog.setMinimumWidth(480)
         layout = QFormLayout(dialog)
+        layout.setContentsMargins(20, 18, 20, 18)
+        layout.setSpacing(10)
         zoom = QComboBox()
         zoom.addItem(tr("Ajustar página"), "page")
         zoom.addItem(tr("Ajustar ancho"), "width")
@@ -2806,7 +2812,10 @@ class PDFiu(QMainWindow):
     def calibration_distance(self):
         dialog = QDialog(self)
         dialog.setWindowTitle(tr("Distancia real entre los puntos"))
+        dialog.setMinimumWidth(420)
         layout = QFormLayout(dialog)
+        layout.setContentsMargins(20, 18, 20, 18)
+        layout.setSpacing(10)
         length = QDoubleSpinBox()
         length.setDecimals(3)
         length.setRange(0.001, 10_000_000)
@@ -3951,7 +3960,10 @@ class PDFiu(QMainWindow):
             return
         dialog = QDialog(self)
         dialog.setWindowTitle(tr("Añadir nota a {0} PDF").format(len(selected)))
+        dialog.setMinimumWidth(480)
         layout = QFormLayout(dialog)
+        layout.setContentsMargins(20, 18, 20, 18)
+        layout.setSpacing(10)
         note = QPlainTextEdit()
         note.setPlaceholderText(tr("Escribe la nota que quieres añadir a los PDF."))
         pages = QLineEdit("1")
@@ -4365,7 +4377,10 @@ class PDFiu(QMainWindow):
             return
         dialog = QDialog(self)
         dialog.setWindowTitle(tr("Proceso de expediente"))
+        dialog.setMinimumWidth(500)
         layout = QFormLayout(dialog)
+        layout.setContentsMargins(20, 18, 20, 18)
+        layout.setSpacing(10)
         presets = dict(self.preferences.value("expediente/recetas", {}) or {})
         profiles = QComboBox()
         profiles.addItems([tr("Sin plantilla"), *sorted(presets)])
@@ -5997,7 +6012,10 @@ class PDFiu(QMainWindow):
     def form_multiple_values(self, field):
         dialog = QDialog(self)
         dialog.setWindowTitle(tr("Seleccionar varias opciones"))
+        dialog.setMinimumWidth(420)
         layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(20, 18, 20, 18)
+        layout.setSpacing(10)
         layout.addWidget(QLabel(field.name))
         choices = QListWidget()
         choices.setSelectionMode(QAbstractItemView.SelectionMode.MultiSelection)
