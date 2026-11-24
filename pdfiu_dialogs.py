@@ -8,9 +8,9 @@ import unicodedata
 from PySide6.QtCore import QEvent, QMimeData, QPoint, QSignalBlocker, QSize, Qt, QTimer
 from PySide6.QtGui import QColor, QDrag, QIcon, QPixmap, QTransform
 from PySide6.QtWidgets import (
-    QAbstractItemView, QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox, QFileDialog,
-    QFormLayout, QFrame, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget, QListWidgetItem, QSlider, QSpinBox,
-    QStackedWidget, QVBoxLayout, QWidget,
+    QAbstractItemView, QApplication, QButtonGroup, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox, QFileDialog,
+    QFormLayout, QFrame, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget, QListWidgetItem, QPushButton, QRadioButton,
+    QSlider, QSpinBox, QStackedWidget, QVBoxLayout, QWidget,
 )
 
 from pdf_ops import pdfium_reader, project_signature_box, reader_for, render_page, signature_boxes, signature_plan
@@ -1206,3 +1206,206 @@ class OrganizePagesDialog(QDialog):
             if angle:
                 rotations[row] = angle
         return order, rotations
+
+
+class CompressDialog(QDialog):
+    ESTIMATE_CODE = 2
+    PRESETS = (
+        (
+            "low",
+            "Compresión baja · Alta calidad",
+            "Conserva la nitidez para imprimir y revisar planos (200 ppp, calidad alta y limpieza interna).",
+            {"lossless": False, "quality": 92, "downsample": True, "dpi": 200, "compact": False,
+             "grayscale": False, "strip_bloat": True, "clean_metadata": False},
+        ),
+        (
+            "recommended",
+            "Compresión recomendada · Equilibrada",
+            "El mejor equilibrio entre peso y calidad visual para el día a día (150 ppp).",
+            {"lossless": False, "quality": 82, "downsample": True, "dpi": 150, "compact": True,
+             "grayscale": False, "strip_bloat": True, "clean_metadata": False},
+        ),
+        (
+            "extreme",
+            "Compresión extrema · Menor peso",
+            "Máxima reducción para correo o trámites con límite de MB (96 ppp y limpieza completa).",
+            {"lossless": False, "quality": 62, "downsample": True, "dpi": 96, "compact": True,
+             "grayscale": False, "strip_bloat": True, "clean_metadata": True},
+        ),
+    )
+
+    def __init__(self, parent, previous=None):
+        super().__init__(parent)
+        self.setWindowTitle(tr("Comprimir PDF"))
+        self.setMinimumWidth(480)
+        self._applying_preset = False
+        self._custom = False
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(10)
+
+        intro = QLabel(tr("Elige el nivel de compresión. El texto y las líneas vectoriales siempre se conservan nítidos."), objectName="muted")
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+
+        self.preset_group = QButtonGroup(self)
+        self.preset_buttons = {}
+        for index, (key, title, subtitle, _) in enumerate(self.PRESETS):
+            card = QFrame()
+            card.setFrameShape(QFrame.Shape.StyledPanel)
+            card_layout = QVBoxLayout(card)
+            card_layout.setContentsMargins(12, 8, 12, 8)
+            card_layout.setSpacing(2)
+            radio = QRadioButton(tr(title))
+            font = radio.font()
+            font.setBold(True)
+            radio.setFont(font)
+            desc = QLabel(tr(subtitle), objectName="muted")
+            desc.setWordWrap(True)
+            desc.setContentsMargins(20, 0, 0, 0)
+            card_layout.addWidget(radio)
+            card_layout.addWidget(desc)
+            self.preset_group.addButton(radio, index)
+            self.preset_buttons[key] = radio
+            layout.addWidget(card)
+
+        self.advanced_toggle = QPushButton("▸ " + tr("Opciones avanzadas"))
+        self.advanced_toggle.setFlat(True)
+        self.advanced_toggle.setCheckable(True)
+        self.advanced_toggle.setStyleSheet("text-align: left; padding: 4px 2px;")
+        layout.addWidget(self.advanced_toggle)
+
+        self.advanced_box = QFrame()
+        self.advanced_box.setFrameShape(QFrame.Shape.StyledPanel)
+        adv_layout = QFormLayout(self.advanced_box)
+        adv_layout.setContentsMargins(12, 10, 12, 10)
+
+        self.lossless = QCheckBox(tr("Solo estructura (sin pérdida en imágenes)"))
+        self.quality = QSpinBox()
+        self.quality.setRange(50, 100)
+        self.quality.setValue(82)
+        self.downsample = QCheckBox(tr("Reducir resolución de imágenes"))
+        self.dpi = QSpinBox()
+        self.dpi.setRange(72, 1200)
+        self.dpi.setValue(150)
+        self.dpi.setSuffix(tr(" ppp"))
+        self.dpi.setToolTip(tr("Densidad máxima en la página para las imágenes que PDFiu remuestrea"))
+        self.compact = QCheckBox(tr("Comprimir más las fotos y los escaneos tonales"))
+        self.grayscale = QCheckBox(tr("Convertir imágenes a escala de grises"))
+        self.strip_bloat = QCheckBox(tr("Eliminar datos privados de edición y miniaturas"))
+        self.clean_metadata = QCheckBox(tr("Eliminar metadatos del documento"))
+
+        adv_layout.addRow(self.lossless)
+        adv_layout.addRow(tr("Calidad JPEG"), self.quality)
+        adv_layout.addRow(self.downsample)
+        adv_layout.addRow(tr("Resolución máxima"), self.dpi)
+        adv_layout.addRow(self.compact)
+        adv_layout.addRow(self.grayscale)
+        adv_layout.addRow(self.strip_bloat)
+        adv_layout.addRow(self.clean_metadata)
+        self.advanced_box.hide()
+        layout.addWidget(self.advanced_box)
+
+        choices = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
+        proceed = choices.addButton(tr("Comprimir ahora"), QDialogButtonBox.ButtonRole.AcceptRole)
+        proceed.setDefault(True)
+        estimate = choices.addButton(tr("Estimar tamaño"), QDialogButtonBox.ButtonRole.ActionRole)
+        estimate.clicked.connect(lambda: self.done(self.ESTIMATE_CODE))
+        choices.button(QDialogButtonBox.StandardButton.Cancel).setText(tr("Cancelar"))
+        choices.accepted.connect(self.accept)
+        choices.rejected.connect(self.reject)
+        layout.addWidget(choices)
+
+        self.preset_group.idClicked.connect(self.apply_preset_index)
+        self.advanced_toggle.toggled.connect(self.toggle_advanced)
+        for control in (self.lossless, self.downsample, self.compact, self.grayscale, self.strip_bloat, self.clean_metadata):
+            control.toggled.connect(self.on_advanced_changed)
+        self.quality.valueChanged.connect(self.on_advanced_changed)
+        self.dpi.valueChanged.connect(self.on_advanced_changed)
+
+        self.apply_preset_index(1)
+        if isinstance(previous, dict):
+            self.restore_settings(previous)
+
+    def toggle_advanced(self, checked):
+        self.advanced_toggle.setText(("▾ " if checked else "▸ ") + tr("Opciones avanzadas"))
+        self.advanced_box.setVisible(checked)
+        self.adjustSize()
+
+    def apply_preset_index(self, index):
+        _, _, _, values = self.PRESETS[index]
+        self._applying_preset = True
+        try:
+            self._custom = False
+            self.preset_buttons[self.PRESETS[index][0]].setChecked(True)
+            self.lossless.setChecked(values["lossless"])
+            self.quality.setValue(values["quality"])
+            self.downsample.setChecked(values["downsample"])
+            self.dpi.setValue(values["dpi"])
+            self.compact.setChecked(values["compact"])
+            self.grayscale.setChecked(values["grayscale"])
+            self.strip_bloat.setChecked(values["strip_bloat"])
+            self.clean_metadata.setChecked(values["clean_metadata"])
+            self._sync_enabled()
+        finally:
+            self._applying_preset = False
+
+    def restore_settings(self, saved):
+        preset = saved.get("preset", "recommended")
+        keys = [item[0] for item in self.PRESETS]
+        if preset in keys:
+            self.apply_preset_index(keys.index(preset))
+            return
+        self._applying_preset = True
+        try:
+            self._custom = True
+            self.lossless.setChecked(bool(saved.get("lossless", False)))
+            self.quality.setValue(int(saved.get("quality", 82)))
+            self.downsample.setChecked(bool(saved.get("downsample", True)))
+            self.dpi.setValue(int(saved.get("dpi", 150)))
+            self.compact.setChecked(bool(saved.get("compact", True)))
+            self.grayscale.setChecked(bool(saved.get("grayscale", False)))
+            self.strip_bloat.setChecked(bool(saved.get("strip_bloat", True)))
+            self.clean_metadata.setChecked(bool(saved.get("clean_metadata", False)))
+            self._sync_enabled()
+        finally:
+            self._applying_preset = False
+        self.advanced_toggle.setChecked(True)
+
+    def _sync_enabled(self):
+        images_active = not self.lossless.isChecked()
+        self.quality.setEnabled(images_active)
+        self.downsample.setEnabled(images_active)
+        self.dpi.setEnabled(images_active and self.downsample.isChecked())
+        self.compact.setEnabled(images_active)
+        self.grayscale.setEnabled(images_active)
+
+    def on_advanced_changed(self, *_):
+        if self._applying_preset:
+            return
+        self._custom = True
+        self._sync_enabled()
+
+    def current_settings(self):
+        preset_id = self.preset_group.checkedId()
+        preset_key = "custom" if self._custom or preset_id < 0 else self.PRESETS[preset_id][0]
+        return {
+            "preset": preset_key,
+            "lossless": self.lossless.isChecked(),
+            "quality": self.quality.value(),
+            "downsample": self.downsample.isChecked(),
+            "dpi": self.dpi.value(),
+            "compact": self.compact.isChecked(),
+            "grayscale": self.grayscale.isChecked(),
+            "strip_bloat": self.strip_bloat.isChecked(),
+            "clean_metadata": self.clean_metadata.isChecked(),
+        }
+
+    def profile_label(self):
+        settings = self.current_settings()
+        if settings["preset"] == "custom":
+            return tr("Personalizado")
+        for key, title, _, _ in self.PRESETS:
+            if key == settings["preset"]:
+                return tr(title)
+        return tr("Personalizado")

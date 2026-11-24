@@ -23,21 +23,22 @@ Lector y editor de PDF de código abierto creado por **mfcb89**, pensado como al
 
 | Área | Funciones |
 | --- | --- |
-| Lectura | Desplazamiento continuo, zoom, pantalla completa, miniaturas, marcadores, capas, búsqueda con contexto, tildes opcionales y operadores. |
-| Páginas y lotes | Mesa de trabajo para varios PDF, unión con índice, extracción, inserción arrastrando, reordenación, giro y varias páginas por hoja. |
-| Edición y revisión | Editar texto compatible, rellenar formularios AcroForm, añadir notas, resaltados, formas, encabezados, pies y números de página. |
-| Certificados y protección | Firmar con recuadro visible, firmar varias páginas y documentos, consultar los datos de las firmas, proteger copias y censurar zonas. |
-| Planos | Comparar en paralelo, superponer o ver diferencias. Calibrar una distancia o escala y medir longitudes, perímetros y superficies. |
-| OCR y exportación | Reconocer español e inglés en una página o en todo el PDF. Exportar a Word, Excel, CSV, Markdown con vista previa, TXT o PNG. Copiar una página como imagen. |
-| Impresión y salida | Vista previa, tamaño real, ajuste, mosaico, folleto, compresión con estimación y exportación PDF/A con herramientas externas. |
+| **Lectura y navegación** | Pestañas desmontables en varias ventanas, vista continua o **doble página (`Ctrl+2`)**, tema claro y oscuro, pantalla completa, miniaturas, filtro de marcadores, búsqueda rápida (`Ctrl+F`) con tildes/operadores y paleta de comandos (`Ctrl+K`). |
+| **Organizar, unir y dividir** | **Cuadrícula visual de páginas** para reordenar arrastrando, girar o eliminar; unir varios PDF con índice automático, **dividir PDF** por rangos o cada N hojas, extraer páginas, varias páginas por hoja y mesa de trabajo en lote. |
+| **Comprimir PDF** | **3 niveles rápidos** (*Baja*, *Recomendada* y *Extrema*) más **Opciones avanzadas**: compresión de imágenes `RGB`, `ICCBased`, `CMYK`, `JPEG2000` y transparencias (`SMask`), paso a escala de grises, limpieza de datos privados/miniaturas/metadatos, **estimación previa** y **comparación visual al 100 %** antes de guardar. |
+| **Editar y anotar** | Editar texto compatible, añadir texto nuevo, rellenar y fijar formularios **AcroForm**, encabezados, pies y numeración de páginas; resaltados, subrayados, notas, formas y panel de anotaciones con filtros. |
+| **Firmar con certificado** | Firma digital **PAdES (RSA y ECDSA)** con certificados del almacén de Windows o archivos `.pfx`/`.p12`, recuadro visible, **firma en lote** y explorador de firmas con verificación de integridad. |
+| **Proteger y privacidad** | **Desbloquear PDF**, cifrar copias con contraseña **AES-256**, **censura irreversible** (borra el contenido real con OCR opcional) y **preparar copia para compartir** sin metadatos. |
+| **OCR y exportación** | **OCR local** en español e inglés (Tesseract) en una página o en todo el documento. Exportar a **Word (`.docx`)**, **Excel (`.xlsx`)**, **CSV**, **Markdown (`.md`)** con vista previa, **TXT**, **PNG**, **PDF/A** y **copiar página como imagen** (`Ctrl+Shift+C`). |
+| **Planos e impresión** | Comparar revisiones en paralelo, superpuestas o resaltando diferencias; calibrar escalas `1:N` y medir longitudes, perímetros y superficies. Impresión con vista previa, tamaño real, mosaico para planos y folleto. |
 
-[Manual de usuario](LEEME.md) · [Guía de compilación](packaging/LEEME.md) · [Historial de cambios](CHANGELOG.md)
+[Manual de usuario](LEEME.md) · [Guía de compilación](packaging/LEEME.md) · [Política de privacidad](PRIVACY.md) · [Historial de cambios](CHANGELOG.md)
 
 ## Obtener PDFiu
 
-### Instalador oficial (Windows x64)
+### Tienda oficial (Microsoft Store · Windows x64)
 
-El instalador oficial listo para usar (sin necesidad de instalar Python ni configurar dependencias) estará disponible en la página oficial de descargas y financia el desarrollo continuo, la firma de código y el canal de actualizaciones.
+La versión oficial lista para usar en Windows 10/11 (sin instalar Python ni dependencias, con modelos de OCR incluidos, pago único y **15 días de prueba gratuita**) está disponible en [Microsoft Store](https://apps.microsoft.com/detail/9NK06R3SRRW3) y financia el desarrollo continuo y las actualizaciones.
 
 ### Ejecutar gratis desde el código fuente
 

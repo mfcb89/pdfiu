@@ -151,6 +151,90 @@ class PdfOpsTests(unittest.TestCase):
             self.assertEqual(reader.pages[0].rotation % 360, 90)
             self.assertEqual(reader.pages[2].rotation % 360, 180)
 
+    def test_compress_strips_bloat_and_metadata(self):
+        from pypdf import PdfReader, PdfWriter
+        from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            base = root / "base.pdf"
+            _make_text_pdf(base, ["Texto importante de prueba"])
+            bloated = root / "bloated.pdf"
+            out = root / "out.pdf"
+
+            writer = PdfWriter(clone_from=PdfReader(str(base)))
+            piece_stream = DecodedStreamObject()
+            piece_stream.set_data(b"ADOBE_PRIVATE_DATA_" * 4000)
+            piece_ref = writer._add_object(piece_stream)
+            writer.pages[0][NameObject("/PieceInfo")] = DictionaryObject({NameObject("/Illustrator"): piece_ref})
+            meta_stream = DecodedStreamObject()
+            meta_stream[NameObject("/Type")] = NameObject("/Metadata")
+            meta_stream.set_data(b"<x:xmpmeta>" + (b"X" * 20000) + b"</x:xmpmeta>")
+            writer.root_object[NameObject("/Metadata")] = writer._add_object(meta_stream)
+            with bloated.open("wb") as handle:
+                writer.write(handle)
+
+            before, after, _, _ = self.pdf_ops.compress_copy(bloated, out, quality=None, strip_bloat=True, clean_metadata=True)
+            self.assertLess(after, before * 0.4)
+            cleaned = PdfReader(str(out))
+            self.assertNotIn("/PieceInfo", cleaned.pages[0])
+            self.assertNotIn("/Metadata", cleaned.root_object)
+
+    def test_compress_handles_smask_icc_and_grayscale(self):
+        from io import BytesIO
+        from PIL import Image
+        from pypdf import PdfReader, PdfWriter
+        from pypdf.generic import ArrayObject, DecodedStreamObject, NameObject, NumberObject
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            src = root / "images.pdf"
+            out_rgb = root / "out_rgb.pdf"
+            out_gray = root / "out_gray.pdf"
+
+            # Create a 600x600 RGBA photo-like image embedded via reportlab (generates RGB + /SMask)
+            img = Image.new("RGBA", (600, 600))
+            px = img.load()
+            for y in range(600):
+                for x in range(600):
+                    px[x, y] = ((x * 3) % 256, (y * 5) % 256, ((x + y) * 7) % 256, 200 if x > 100 else 255)
+            png_buf = BytesIO()
+            img.save(png_buf, format="PNG")
+            png_buf.seek(0)
+
+            from reportlab.lib.utils import ImageReader
+            from reportlab.pdfgen.canvas import Canvas
+
+            canvas = Canvas(str(src), pagesize=(300, 300))
+            canvas.drawImage(ImageReader(png_buf), 20, 20, width=144, height=144, mask="auto")
+            canvas.save()
+
+            # Also test ICCBased RGB wrapping on the main image XObject
+            reader = PdfReader(str(src))
+            writer = PdfWriter(clone_from=reader)
+            xobjs = writer.pages[0]["/Resources"]["/XObject"].get_object()
+            for ref in xobjs.values():
+                obj = ref.get_object()
+                if obj.get("/Subtype") == "/Image" and obj.get("/ColorSpace") == "/DeviceRGB":
+                    icc = DecodedStreamObject()
+                    icc[NameObject("/N")] = NumberObject(3)
+                    icc.set_data(b"\x00" * 128)
+                    obj[NameObject("/ColorSpace")] = ArrayObject([NameObject("/ICCBased"), writer._add_object(icc)])
+            with src.open("wb") as handle:
+                writer.write(handle)
+
+            before, after_rgb, optimized, resized = self.pdf_ops.compress_copy(src, out_rgb, quality=75, dpi=96, compact=True)
+            self.assertLess(after_rgb, before)
+            self.assertGreaterEqual(optimized, 1)
+            self.assertGreaterEqual(resized, 1)
+
+            _, after_gray, _, _ = self.pdf_ops.compress_copy(src, out_gray, quality=75, dpi=96, compact=True, grayscale=True)
+            self.assertLess(after_gray, before)
+            gray_reader = PdfReader(str(out_gray))
+            gray_xobjs = gray_reader.pages[0]["/Resources"]["/XObject"].get_object()
+            image_cs = [ref.get_object().get("/ColorSpace") for ref in gray_xobjs.values() if ref.get_object().get("/Subtype") == "/Image"]
+            self.assertIn("/DeviceGray", image_cs)
+
 
 if __name__ == "__main__":
     unittest.main()

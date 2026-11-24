@@ -23,21 +23,22 @@ An open-source PDF reader and editor created by **mfcb89**, built as a lightweig
 
 | Area | Features |
 | --- | --- |
-| Read | Continuous scrolling, zoom, full screen, thumbnails, bookmarks, layers, and search with context, optional accent matching, and operators. |
-| Organize pages and batches | Keep several PDFs in a workspace, merge with an index, extract or reorder pages, insert them by dragging, rotate pages, and arrange multiple pages per sheet. |
-| Edit and review | Edit supported text, fill AcroForm fields, and add comments, highlights, shapes, headers, footers, and page numbers. |
-| Sign and protect | Add visible certificate signatures to pages or batches, inspect signature details, protect copies, and redact areas. |
-| Work with drawings | Compare side by side, overlay drawings, or highlight changes. Calibrate a known distance or drawing scale and measure length, perimeter, and area. |
-| OCR and export | Recognize English and Spanish on one page or throughout a PDF. Export to Word, Excel, CSV, Markdown with preview, TXT, or PNG. Copy a page as an image. |
-| Print and prepare copies | Preview print output, print at actual size, fit, tile, or make a booklet. Estimate compression and export PDF/A with external tools. |
+| **Read & navigate** | Detachable multi-window tabs, continuous scroll or **two-page view (`Ctrl+2`)**, light & dark themes, full screen, thumbnails, bookmark filtering, quick find (`Ctrl+F`) with accent/operator support, and command palette (`Ctrl+K`). |
+| **Organize, merge & split** | **Visual page grid** with drag-and-drop reordering, rotation, and deletion; merge multiple PDFs with an automatic outline, **split PDF** by ranges or every N pages, extract pages, multiple pages per sheet, and batch workspace. |
+| **Compress PDF** | **3 simple presets** (*Low*, *Recommended*, *Extreme*) plus **Advanced options**: compresses `RGB`, `ICCBased`, `CMYK`, `JPEG2000`, and transparent (`SMask`) images, optional grayscale conversion, private editing bloat/thumbnail/metadata cleanup, **size estimator**, and **100% side-by-side visual comparison** before saving. |
+| **Edit & annotate** | Edit supported text, add new text, fill and flatten **AcroForm** fields, headers, footers, and page numbering; highlights, underlines, sticky notes, shapes, and filterable annotations panel. |
+| **Digital signatures** | **PAdES (RSA & ECDSA)** signing with Windows certificate store or `.pfx`/`.p12` files, visible signature box, **batch signing**, and signature explorer with integrity verification. |
+| **Protect & privacy** | **Unlock PDFs**, encrypt copies with **AES-256** passwords, **irreversible redaction** (removes real underlying content with optional OCR), and **prepare a clean copy for sharing** without metadata. |
+| **Offline OCR & export** | **Local OCR** in English and Spanish (Tesseract) on one page or the entire document. Export to **Word (`.docx`)**, **Excel (`.xlsx`)**, **CSV**, **Markdown (`.md`)** with preview, **TXT**, **PNG**, **PDF/A**, and **copy page as image** (`Ctrl+Shift+C`). |
+| **Drawings & printing** | Compare revisions side by side, overlaid, or with color-coded diffs; calibrate `1:N` scales and measure lengths, perimeters, and areas. Print preview with actual size, tiled sheets, and booklets. |
 
-[User guide](USER_GUIDE.en.md) · [Build guide](packaging/LEEME.en.md) · [Changelog](CHANGELOG.md)
+[User guide](USER_GUIDE.en.md) · [Build guide](packaging/LEEME.en.md) · [Privacy policy](PRIVACY.md) · [Changelog](CHANGELOG.md)
 
 ## Get PDFiu
 
-### Official installer (Windows x64)
+### Official Store app (Microsoft Store · Windows x64)
 
-The ready-to-use official installer (no Python setup required) will be distributed through the official download page to fund ongoing development, code signing, and the update channel.
+The ready-to-use Windows 10/11 package (no Python setup required, English & Spanish OCR models bundled, one-time purchase with a **15-day free trial**) is available on the [Microsoft Store](https://apps.microsoft.com/detail/9NK06R3SRRW3) and funds ongoing development and updates.
 
 ### Run for free from source
 

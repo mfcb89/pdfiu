@@ -929,23 +929,53 @@ def image_matrix(matrix, operands):
     return (a*e + c*f, b*e + d*f, a*g + c*h, b*g + d*h)
 
 
-def compressible_image_format(stream, dpi, compact):
+def resolve_image_colorspace(stream):
+    color_space = stream.get("/ColorSpace")
+    if hasattr(color_space, "get_object"):
+        color_space = color_space.get_object()
+    if color_space == "/DeviceRGB":
+        return "rgb", 3
+    if color_space == "/DeviceGray":
+        return "gray", 1
+    if color_space == "/DeviceCMYK":
+        return "cmyk", 4
+    if isinstance(color_space, ArrayObject) and len(color_space) >= 2 and color_space[0] == "/ICCBased":
+        profile = color_space[1].get_object() if hasattr(color_space[1], "get_object") else color_space[1]
+        if isinstance(profile, DictionaryObject):
+            channels = int(profile.get("/N", 0))
+            if channels == 3:
+                return "icc-rgb", 3
+            if channels == 1:
+                return "icc-gray", 1
+            if channels == 4:
+                return "icc-cmyk", 4
+    return None
+
+
+def compressible_image_format(stream, dpi, compact, *, grayscale=False):
     filters = stream.get("/Filter", [])
     if isinstance(filters, str):
         filters = [filters]
-    color_space = stream.get("/ColorSpace")
-    if (color_space not in ("/DeviceRGB", "/DeviceGray")
-            or any(name not in ("/ASCII85Decode", "/ASCIIHexDecode") for name in filters[:-1])
-            or any(key in stream for key in ("/Mask", "/SMask", "/SMaskInData", "/ImageMask", "/Alternates", "/F"))):
+    if (any(name not in ("/ASCII85Decode", "/ASCIIHexDecode") for name in filters[:-1])
+            or any(key in stream for key in ("/Mask", "/SMaskInData", "/ImageMask", "/Alternates", "/F"))):
+        return None
+    cs_info = resolve_image_colorspace(stream)
+    if cs_info is None:
+        return None
+    cs_kind, channels = cs_info
+    if cs_kind in ("cmyk", "icc-cmyk") and not (compact or grayscale):
+        return None
+    if cs_kind in ("icc-rgb", "icc-gray") and not (dpi or compact or grayscale):
         return None
     if "/Decode" in stream:
         decode = stream["/Decode"]
-        channels = 3 if color_space == "/DeviceRGB" else 1
         if stream.get("/BitsPerComponent") != 8 or not isinstance(decode, ArrayObject) or tuple(decode) != (0, 1) * channels:
             return None
     if filters and filters[-1] == "/DCTDecode" and "/DecodeParms" not in stream:
         return "/DCTDecode"
-    if (dpi or compact) and (not filters or filters[-1] == "/FlateDecode") and stream.get("/BitsPerComponent") == 8:
+    if filters and filters[-1] == "/JPXDecode" and (dpi or compact or grayscale):
+        return "/JPXDecode"
+    if (dpi or compact or grayscale) and (not filters or filters[-1] == "/FlateDecode") and stream.get("/BitsPerComponent") == 8:
         return "/FlateDecode"
     return None
 
@@ -966,6 +996,7 @@ class RasterEncoding:
     filter_name: str
     resized: bool
     predictor_colors: int = 0
+    color_space: str | None = None
 
 
 def photographic_image(image):
@@ -1002,83 +1033,175 @@ def png_predictor_encoding(image):
     return b"".join(chunks)
 
 
-def recompress_jpeg(stream, sizes, quality, dpi, compact, *, fast=False):
+def recompress_jpeg(stream, sizes, quality, dpi, compact, *, fast=False, grayscale=False):
     from PIL import Image
 
     try:
         original_bytes = stream.get_data()
         with Image.open(BytesIO(original_bytes)) as original:
             width, height = original.size
-            if (original.mode not in ("RGB", "L") or original.info.get("icc_profile")
-                    or (width, height) != (stream.get("/Width"), stream.get("/Height"))):
+            if (width, height) != (stream.get("/Width"), stream.get("/Height")):
+                return None
+            if original.mode not in ("RGB", "L", "CMYK"):
+                return None
+            if original.mode == "CMYK" and not (compact or grayscale):
+                return None
+            if original.info.get("icc_profile") and not (compact or grayscale):
                 return None
             picture = original
+            converted = False
+            target_mode = "L" if grayscale else ("RGB" if original.mode == "CMYK" else original.mode)
             planned = scaled_image_size(width, height, sizes, dpi)
             resized = planned != (width, height)
             if resized:
-                if fast:
+                if fast and original.mode != "CMYK":
                     original.draft(original.mode, planned)
                 picture = original.resize(planned, Image.Resampling.LANCZOS, reducing_gap=3.0 if fast else None)
+            if picture.mode != target_mode:
+                converted_pic = picture.convert(target_mode)
+                if picture is not original:
+                    picture.close()
+                picture = converted_pic
+                converted = True
             try:
-                encoded = jpeg_encoding(picture, quality, compact=compact and photographic_image(picture if fast else original))
+                is_photo = photographic_image(picture if (fast or converted) else original)
+                encoded = jpeg_encoding(picture, quality, compact=compact and (is_photo or grayscale))
             finally:
                 if picture is not original:
                     picture.close()
-            if not resized and len(original_bytes) < len(encoded):
+            is_jpx = stream.get("/Filter") == "/JPXDecode" or (isinstance(stream.get("/Filter"), list) and stream.get("/Filter")[-1] == "/JPXDecode")
+            if not resized and not converted and not is_jpx and len(original_bytes) < len(encoded):
                 encoded = original_bytes
-            if len(encoded) < len(stream._data) * 0.98:
-                return RasterEncoding(encoded, planned, "/DCTDecode", resized)
+            if len(encoded) < len(stream._data) * 0.98 or converted:
+                new_cs = None
+                if target_mode == "L" and stream.get("/ColorSpace") != "/DeviceGray":
+                    new_cs = "/DeviceGray"
+                elif target_mode == "RGB" and stream.get("/ColorSpace") != "/DeviceRGB":
+                    new_cs = "/DeviceRGB"
+                if len(encoded) < len(stream._data) * 0.98:
+                    return RasterEncoding(encoded, planned, "/DCTDecode", resized, color_space=new_cs)
     except (OSError, ValueError, PdfReadError, Image.DecompressionBombError):
         return None
     return None
 
 
-def recompress_raster(stream, sizes, quality, dpi, mode, compact, *, fast=False):
-    if mode == "/DCTDecode":
-        return recompress_jpeg(stream, sizes, quality, dpi, compact, fast=fast)
+def recompress_raster(stream, sizes, quality, dpi, mode, compact, *, fast=False, grayscale=False):
+    if mode in ("/DCTDecode", "/JPXDecode"):
+        return recompress_jpeg(stream, sizes, quality, dpi, compact, fast=fast, grayscale=grayscale)
     from PIL import Image
 
     width, height = int(stream["/Width"]), int(stream["/Height"])
     if min(width, height) < 1 or width * height > 50_000_000:
         return None
+    cs_info = resolve_image_colorspace(stream)
+    if cs_info is None:
+        return None
+    cs_kind, _ = cs_info
     target = scaled_image_size(width, height, sizes, dpi)
     resized = target != (width, height)
-    if not resized and not compact:
+    if not resized and not compact and not grayscale:
         return None
-    color = "RGB" if stream["/ColorSpace"] == "/DeviceRGB" else "L"
+    raw_mode = "L" if cs_kind in ("gray", "icc-gray") else ("CMYK" if cs_kind in ("cmyk", "icc-cmyk") else "RGB")
+    target_mode = "L" if grayscale or raw_mode == "L" else "RGB"
+    new_cs = "/DeviceGray" if target_mode == "L" else "/DeviceRGB"
     try:
-        with Image.frombytes(color, (width, height), stream.get_data()) as picture:
-            with picture.resize(target, Image.Resampling.LANCZOS, reducing_gap=3.0 if fast else None) as smaller:
-                if compact and photographic_image(picture):
-                    jpeg = jpeg_encoding(smaller, quality, compact=True)
-                    if len(jpeg) < len(stream._data) * 0.98:
-                        return RasterEncoding(jpeg, target, "/DCTDecode", resized)
-                payload = png_predictor_encoding(smaller)
+        with Image.frombytes(raw_mode, (width, height), stream.get_data()) as picture:
+            work = picture.convert(target_mode) if picture.mode != target_mode else picture
+            try:
+                smaller = work.resize(target, Image.Resampling.LANCZOS, reducing_gap=3.0 if fast else None) if resized else work
+                try:
+                    if compact and (photographic_image(work) or grayscale):
+                        jpeg = jpeg_encoding(smaller, quality, compact=True)
+                        if len(jpeg) < len(stream._data) * 0.98:
+                            return RasterEncoding(jpeg, target, "/DCTDecode", resized, color_space=new_cs)
+                    payload = png_predictor_encoding(smaller)
+                finally:
+                    if smaller is not work:
+                        smaller.close()
+            finally:
+                if work is not picture:
+                    work.close()
     except (OSError, ValueError, PdfReadError):
         return None
     if len(payload) + 64 < len(stream._data) * 0.98:
-        return RasterEncoding(payload, target, "/FlateDecode", resized, len(color))
+        return RasterEncoding(payload, target, "/FlateDecode", resized, len(target_mode), color_space=new_cs)
     return None
 
 
-def optimize_images(writer, quality, dpi, compact, *, fast=False, progress=None):
+def _smask_is_resizable(smask):
+    if (not isinstance(smask, StreamObject) or smask.get("/ColorSpace") != "/DeviceGray"
+            or smask.get("/BitsPerComponent") != 8):
+        return False
+    if "/Decode" in smask:
+        decode = smask["/Decode"]
+        if not isinstance(decode, ArrayObject) or tuple(decode) != (0, 1):
+            return False
+    return True
+
+
+def _resize_smask_stream(smask, target, *, fast=False):
+    from PIL import Image
+
+    if not _smask_is_resizable(smask):
+        return False
+    width, height = int(smask.get("/Width", 0)), int(smask.get("/Height", 0))
+    if min(width, height) < 1 or width * height > 50_000_000:
+        return False
+    try:
+        with Image.frombytes("L", (width, height), smask.get_data()) as mask_img:
+            with mask_img.resize(target, Image.Resampling.LANCZOS, reducing_gap=3.0 if fast else None) as resized_mask:
+                payload = png_predictor_encoding(resized_mask)
+    except (OSError, ValueError, PdfReadError):
+        return False
+    smask._data = payload
+    smask.decoded_self = None
+    smask[NameObject("/Filter")] = NameObject("/FlateDecode")
+    smask[NameObject("/DecodeParms")] = DictionaryObject({
+        NameObject("/Predictor"): NumberObject(15),
+        NameObject("/Colors"): NumberObject(1),
+        NameObject("/BitsPerComponent"): NumberObject(8),
+        NameObject("/Columns"): NumberObject(target[0]),
+    })
+    smask[NameObject("/Width")] = NumberObject(target[0])
+    smask[NameObject("/Height")] = NumberObject(target[1])
+    return True
+
+
+def optimize_images(writer, quality, dpi, compact, *, fast=False, grayscale=False, progress=None):
     usages, can_resize = pdf_image_usage(writer)
     dpi = dpi if can_resize else None
+    smask_refs = {}
+    for stream, _ in usages:
+        if "/SMask" in stream:
+            smask = stream["/SMask"].get_object()
+            smask_refs[id(smask)] = smask_refs.get(id(smask), 0) + 1
     updated, resized = set(), 0
     for index, (stream, sizes) in enumerate(usages, 1):
         if progress:
             progress(index, len(usages))
-        mode = compressible_image_format(stream, dpi, compact)
+        mode = compressible_image_format(stream, dpi, compact, grayscale=grayscale)
         if not mode:
             continue
-        result = recompress_raster(stream, sizes, quality, dpi, mode, compact, fast=fast)
+        smask = stream["/SMask"].get_object() if "/SMask" in stream else None
+        effective_dpi = dpi
+        if smask is not None:
+            can_resize_smask = smask_refs.get(id(smask), 0) == 1 and _smask_is_resizable(smask)
+            if not can_resize_smask:
+                effective_dpi = None
+        result = recompress_raster(stream, sizes, quality, effective_dpi, mode, compact, fast=fast, grayscale=grayscale)
         if not result:
             continue
         new_width, new_height = result.size
+        if smask is not None and result.resized:
+            if not _resize_smask_stream(smask, result.size, fast=fast):
+                continue
+            updated.add(id(smask))
         stream._data = result.payload
         stream.decoded_self = None
         stream[NameObject("/Filter")] = NameObject(result.filter_name)
         stream.pop(NameObject("/DecodeParms"), None)
+        if result.color_space is not None:
+            stream[NameObject("/ColorSpace")] = NameObject(result.color_space)
         if result.predictor_colors:
             stream[NameObject("/DecodeParms")] = DictionaryObject({
                 NameObject("/Predictor"): NumberObject(15),
@@ -1093,12 +1216,12 @@ def optimize_images(writer, quality, dpi, compact, *, fast=False, progress=None)
     return updated, resized
 
 
-def improve_flate(payload):
+def improve_flate(payload, *, level=9):
     try:
         decoder = decompressobj()
         decoded = decoder.decompress(payload, 32 * 1024 * 1024)
         if decoder.eof and not decoder.unused_data:
-            packed = deflate(decoded, level=9)
+            packed = deflate(decoded, level=level)
             return packed if len(packed) < len(payload) else None
     except ZlibError:
         pass
@@ -1154,7 +1277,7 @@ def estimated_image_size(stream, sizes, quality, dpi, mode, compact):
     return size
 
 
-def compression_resource_images(resources, dpi, compact, cache, ancestors=()):
+def compression_resource_images(resources, dpi, compact, cache, ancestors=(), *, grayscale=False):
     resources = resources.get_object()
     identity = id(resources)
     if identity in ancestors or len(ancestors) >= 20:
@@ -1169,21 +1292,21 @@ def compression_resource_images(resources, dpi, compact, cache, ancestors=()):
         obj = ref.get_object()
         subtype = obj.get("/Subtype")
         if subtype == "/Image" and getattr(ref, "idnum", None) is not None:
-            mode = compressible_image_format(obj, dpi, compact)
+            mode = compressible_image_format(obj, dpi, compact, grayscale=grayscale)
             if mode:
                 images[ref.idnum] = obj, mode
         elif subtype == "/Form" and "/Resources" in obj:
-            images.update(compression_resource_images(obj["/Resources"], dpi, compact, cache, (*ancestors, identity)))
+            images.update(compression_resource_images(obj["/Resources"], dpi, compact, cache, (*ancestors, identity), grayscale=grayscale))
     cache[identity] = images
     return images
 
 
-def estimate_image_reduction(reader, indices, quality, dpi, compact):
+def estimate_image_reduction(reader, indices, quality, dpi, compact, *, grayscale=False):
     resources_cache = {}
     candidates = {}
     weights = []
     for index, page in enumerate(reader.pages):
-        images = compression_resource_images(page.get("/Resources", DictionaryObject()), dpi, compact, resources_cache)
+        images = compression_resource_images(page.get("/Resources", DictionaryObject()), dpi, compact, resources_cache, grayscale=grayscale)
         if not images:
             continue
         box = page.mediabox
@@ -1206,8 +1329,42 @@ def estimate_image_reduction(reader, indices, quality, dpi, compact):
     gain = 0
     for key, (stream, mode, footprints) in candidates.items():
         sizes = observed[key] if len(footprints) == 1 and key in observed else list(footprints.values())
-        gain += len(stream._data) - estimated_image_size(stream, sizes, quality, dpi if can_resize else None, mode, compact)
+        projected = estimated_image_size(stream, sizes, quality, dpi if can_resize else None, mode, compact)
+        if grayscale and resolve_image_colorspace(stream) not in (None, ("gray", 1), ("icc-gray", 1)):
+            projected = round(projected * 0.65)
+        gain += len(stream._data) - projected
     return gain
+
+
+def _stream_payload_size(value):
+    obj = value.get_object() if hasattr(value, "get_object") else value
+    if isinstance(obj, StreamObject):
+        return len(obj._data)
+    if isinstance(obj, DictionaryObject):
+        return sum(_stream_payload_size(item) for item in obj.values())
+    if isinstance(obj, ArrayObject):
+        return sum(_stream_payload_size(item) for item in obj)
+    return 0
+
+
+def strip_pdf_bloat(writer, *, strip_bloat=True, clean_metadata=False):
+    if strip_bloat:
+        for key in ("/PieceInfo", "/SpiderInfo"):
+            writer.root_object.pop(NameObject(key), None)
+        for page in writer.pages:
+            for key in ("/PieceInfo", "/Thumb", "/LastModified"):
+                page.pop(NameObject(key), None)
+    if clean_metadata:
+        writer.root_object.pop(NameObject("/Metadata"), None)
+        for page in writer.pages:
+            page.pop(NameObject("/Metadata"), None)
+        for obj in writer._objects:
+            if isinstance(obj, StreamObject) and "/Metadata" in obj:
+                obj.pop(NameObject("/Metadata"), None)
+        if hasattr(writer, "_info") and writer._info is not None:
+            info = writer._info.get_object() if hasattr(writer._info, "get_object") else writer._info
+            if isinstance(info, DictionaryObject):
+                info.clear()
 
 
 @contextmanager
@@ -1228,29 +1385,47 @@ def compression_reader(source, *, allow_empty_password=False, password=None, rea
             yield reader, size
 
 
-def estimate_compression(source, *, quality=None, dpi=None, compact=False, password=None):
+def estimate_compression(source, *, quality=None, dpi=None, compact=False, grayscale=False,
+                         clean_metadata=False, strip_bloat=True, password=None):
     with compression_reader(source, allow_empty_password=True, password=password, read_only=True) as (reader, before):
         total = len(reader.pages)
         count = min(total, 8)
         indices = [index * (total - 1) // (count - 1) for index in range(count)] if count > 1 else [0]
         scale = total / count
         structure_gain = 0.55 * scale * sum(len(stream._data) for stream in page_streams(reader.pages[i] for i in indices))
-        image_gain = estimate_image_reduction(reader, indices, quality, dpi, compact) if quality is not None else 0
-        gain = round(structure_gain + image_gain)
+        bloat_gain = 0
+        if strip_bloat:
+            for key in ("/PieceInfo", "/SpiderInfo"):
+                if key in reader.root_object:
+                    bloat_gain += _stream_payload_size(reader.root_object[key])
+            bloat_gain += scale * sum(
+                _stream_payload_size(reader.pages[i][key])
+                for i in indices for key in ("/PieceInfo", "/Thumb") if key in reader.pages[i]
+            )
+        if clean_metadata and "/Metadata" in reader.root_object:
+            bloat_gain += _stream_payload_size(reader.root_object["/Metadata"])
+        image_gain = estimate_image_reduction(reader, indices, quality, dpi, compact, grayscale=grayscale) if quality is not None else 0
+        gain = round(structure_gain + bloat_gain + image_gain)
         minimum = min(before, 1024 + 96 * total)
         return before, max(minimum, before - gain), count, total
 
 
-def compress_copy(source, destination, *, quality=None, dpi=None, compact=False, fast=False, allow_larger=False, progress=None):
+def compress_copy(source, destination, *, quality=None, dpi=None, compact=False, fast=False,
+                  allow_larger=False, progress=None, grayscale=False, clean_metadata=False, strip_bloat=True):
     destination = Path(destination)
     if Path(source).resolve() == destination.resolve():
         raise ValueError(tr("Guarda la compresión en un archivo distinto para conservar el original."))
     with compression_reader(source) as (reader, before):
-        return write_compressed_copy(reader, before, destination, quality, dpi, compact, fast, allow_larger, progress)
+        return write_compressed_copy(
+            reader, before, destination, quality, dpi, compact, fast, allow_larger, progress,
+            grayscale=grayscale, clean_metadata=clean_metadata, strip_bloat=strip_bloat,
+        )
 
 
-def write_compressed_copy(reader, before, destination, quality, dpi, compact, fast, allow_larger, progress=None):
+def write_compressed_copy(reader, before, destination, quality, dpi, compact, fast, allow_larger, progress=None,
+                          *, grayscale=False, clean_metadata=False, strip_bloat=True):
     writer = PdfWriter(clone_from=reader)
+    strip_pdf_bloat(writer, strip_bloat=strip_bloat, clean_metadata=clean_metadata)
     image_count = 0
     object_count = len(writer._objects)
 
@@ -1260,15 +1435,19 @@ def write_compressed_copy(reader, before, destination, quality, dpi, compact, fa
         progress(step, count + object_count)
 
     image_progress = report_images if progress else None
-    optimized, resized = optimize_images(writer, quality, dpi, compact, fast=fast, progress=image_progress) if quality is not None else (set(), 0)
+    optimized, resized = (
+        optimize_images(writer, quality, dpi, compact, fast=fast, grayscale=grayscale, progress=image_progress)
+        if quality is not None else (set(), 0)
+    )
+    flate_level = 6 if fast else 9
     for index, stream in enumerate(writer._objects):
         if progress and index % 32 == 0:
             progress(image_count + index, image_count + object_count)
         if (not isinstance(stream, StreamObject) or id(stream) in optimized or "/F" in stream
                 or stream.get("/Type") in ("/Metadata", "/XRef", "/ObjStm") or len(stream._data) <= 30):
             continue
-        if single_flate(stream) and not fast:
-            packed = improve_flate(stream._data)
+        if single_flate(stream):
+            packed = improve_flate(stream._data, level=flate_level)
             if packed:
                 stream._data = packed
                 stream.decoded_self = None
@@ -1278,12 +1457,12 @@ def write_compressed_copy(reader, before, destination, quality, dpi, compact, fa
         reference = getattr(stream, "indirect_reference", None)
         if reference is None:
             continue
-        encoded = stream.flate_encode(level=6 if fast else 9)
+        encoded = stream.flate_encode(level=flate_level)
         if len(encoded._data) + 30 < len(stream._data):
             encoded.indirect_reference = reference
             writer._objects[index] = encoded
     # pypdf hashes the decoded streams during this pass, even when only removing orphans.
-    if before <= 75_000_000:
+    if before <= 150_000_000:
         # Separate optional-content groups can have identical dictionaries and still be distinct layers.
         writer.compress_identical_objects(remove_identicals="/OCProperties" not in writer.root_object, remove_orphans=True)
     if progress:

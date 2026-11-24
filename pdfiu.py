@@ -56,7 +56,7 @@ from pdfiu_views import (
     check_cancellation, file_size_label, icon_button, search_result_item,
 )
 from pdfiu_dialogs import (
-    BatchDialog, CertificateDialog, CommandPaletteDialog, CompressionPreview, MergeDialog,
+    BatchDialog, CertificateDialog, CommandPaletteDialog, CompressDialog, CompressionPreview, MergeDialog,
     OrganizePagesDialog, RevisionComparison, SplitDialog,
 )
 
@@ -281,26 +281,32 @@ class PDFiu(QMainWindow):
         self.shape_color.currentIndexChanged.connect(self.update_shape_color)
         self.ocr_btn = button("Reconocer texto (OCR)", self.run_ocr, glyph="scanner")
         export_tool = action_menu("Exportar", self.export_actions(), "export")
+        export_tool.menu().insertSeparator(export_tool.menu().actions()[5])
         export_tool.menu().aboutToShow.connect(lambda: self.update_export_menu(export_tool.menu()))
-        layout_tool = button("Varias páginas por hoja…", self.sheet_layout_dialog, glyph="view-columns")
+        more_doc_tools = action_menu("Más herramientas", (
+            (tr("Extraer páginas…"), self.extract_range),
+            (tr("Varias páginas por hoja…"), self.sheet_layout_dialog),
+            (tr("Proceso de expediente…"), self.start_recipe),
+        ), "document")
         numbering = button("Numerar páginas…", lambda: self.header_footer(numbering=True), glyph="numbering")
         note_tool = button("Añadir nota", lambda: self.note_workspace() if self.batch_selection_count() else self.start_note(),
                            glyph="add-note")
-        recipe = button("Proceso de expediente…", self.start_recipe, glyph="document")
         self.batch_tools = {self.merge_btn, self.ocr_btn, self.unlock_btn, self.sign_btn, headers,
-                            numbering, note_tool, export_tool, layout_tool, recipe}
+                            numbering, note_tool, export_tool, more_doc_tools}
         self.signature_explorer_btn = button("Explorar firmas", self.signature_explorer, glyph="document-award")
         self.pan_btn = button("Desplazar página", lambda: self.select_mode("pan"), glyph="hand")
         self.pan_btn.setCheckable(True)
         self.pan_btn.setToolTip(tr("Arrastra para desplazar la página cuando está ampliada"))
         groups = (
-            (tr("Documento"), "document", (self.merge_btn, layout_tool, export_tool, self.ocr_btn,
-                           button("Buscar texto", self.open_search, glyph="search"), self.pan_btn,
-                           button("Organizar páginas…", self.organize_pages_grid, glyph="view-columns"),
-                           button("Dividir PDF…", self.split_current_pdf, glyph="extract"),
-                           button("Extraer páginas…", self.extract_range, glyph="extract"),
-                           button("Comprimir copia…", self.compress_pdf, glyph="compress"),
-                           recipe)),
+            (tr("Documento"), "document", (
+                button("Organizar páginas…", self.organize_pages_grid, glyph="view-columns"),
+                self.merge_btn,
+                button("Dividir PDF…", self.split_current_pdf, glyph="extract"),
+                button("Comprimir PDF…", self.compress_pdf, glyph="compress"),
+                export_tool,
+                self.ocr_btn,
+                more_doc_tools,
+            )),
             (tr("Editar"), "edit-pen-2", (self.edit_text_btn, self.text_btn, self.form_btn, forms, headers, numbering)),
             (tr("Anotar"), "chat-2-text", (button("Resaltar selección", self.highlight_selection, glyph="highlight"),
                         button("Subrayar selección", lambda: self.highlight_selection(underline=True), glyph="underline"),
@@ -308,7 +314,12 @@ class PDFiu(QMainWindow):
                         button("Panel de anotaciones", self.open_comments, glyph="chat-2-text"))),
             (tr("Firmar"), "document-award", (self.sign_btn, self.batch_btn, self.signature_explorer_btn)),
             (tr("Planos"), "view-columns", (measurements, button("Superficies", self.open_surfaces, glyph="view-columns"), plan_menu)),
-            (tr("Proteger"), "key", (self.unlock_btn, button("Poner contraseña…", self.protect_pdf, glyph="lock"), redact)),
+            (tr("Proteger"), "key", (
+                self.unlock_btn,
+                button("Poner contraseña…", self.protect_pdf, glyph="lock"),
+                redact,
+                button("Preparar copia para compartir…", self.share_pdf_copy, glyph="export"),
+            )),
         )
         self.tool_library = [(label, widget) for label, _, widgets in groups for widget in widgets
                              if isinstance(widget, QPushButton)]
@@ -863,6 +874,7 @@ class PDFiu(QMainWindow):
         export = files.addMenu(tr("&Exportar"))
         for label, callback in self.export_actions():
             add(export, label, callback)
+        export.insertSeparator(export.actions()[5])
         export.aboutToShow.connect(lambda: self.update_export_menu(export))
         protect = add(files, tr("Proteger con contraseña…"), self.protect_pdf)
         archive = add(files, tr("Guardar copia PDF/A…"), self.export_pdf_archive)
@@ -1801,16 +1813,16 @@ class PDFiu(QMainWindow):
         return (
             ("Unir PDFs", "Unir PDFs", "Selecciona los PDF en Archivos y pulsa Unir PDFs. Revisa su orden antes de crear el resultado."),
             ("Exportar", "Exportar", "Abre Exportar y elige Word, Excel, Markdown u otro formato."),
-            ("Copiar una página como imagen", "Exportar", "Abre Exportar. Usa Copiar página al portapapeles o Imagen PNG."),
+            ("Copiar una página como imagen", "Exportar", "Abre Exportar. Usa Copiar página como imagen o Imagen PNG."),
             ("Firmar con certificado", "Firmar con certificado", "Aquí dibujas el recuadro y eliges el certificado digital."),
             ("Firmar varios PDF", "Firmar lote…", "Aquí eliges los archivos y la posición de cada firma."),
             ("Desbloquear PDF", "Desbloquear PDF", "Usa este botón para crear una copia desbloqueada."),
             ("Encabezados y pies", "Encabezados y pies", "Aquí eliges el texto, su posición y las páginas donde se aplica."),
             ("Numerar páginas", "Numerar páginas…", "Aquí eliges el número inicial, la posición y las páginas."),
             ("Censurar datos", "Censurar datos", "Abre este menú para marcar zonas y guardar una copia censurada."),
-            ("Extraer páginas", "Extraer páginas…", "Elige las páginas que quieres guardar en un PDF independiente."),
+            ("Extraer páginas", "Más herramientas", "Abre Más herramientas para extraer páginas a un PDF independiente."),
             ("Añadir páginas arrastrando", "drag-pages", "Arrastra un PDF desde el Explorador entre las miniaturas. También puedes arrastrar páginas entre dos ventanas de PDFiu."),
-            ("Comprimir archivo", "Comprimir copia…", "Elige un perfil, estima el tamaño y comprueba la copia comprimida antes de guardarla."),
+            ("Comprimir archivo", "Comprimir PDF…", "Elige un nivel de compresión, estima el tamaño y comprueba la copia antes de guardarla."),
         )
 
     def set_tool_tour_step(self, index):
@@ -4575,82 +4587,13 @@ class PDFiu(QMainWindow):
     def compress_pdf(self, previous=None):
         if not self.path or self.job is not None:
             return
-        dialog = QDialog(self)
-        dialog.setWindowTitle(tr("Comprimir PDF"))
-        dialog.resize(530, 330)
-        layout = QFormLayout(dialog)
-        profile = QComboBox()
-        profile.addItems([tr("Sin pérdida"), tr("Planos · conservar resolución"), tr("Equilibrado · 200 ppp"), tr("Personalizado"),
-                          tr("Tamaño reducido · 150 ppp"), tr("Extremo · 96 ppp")])
-        description = QLabel(objectName="muted")
-        description.setWordWrap(True)
-        quality = QSpinBox()
-        quality.setRange(50, 100)
-        quality.setValue(94)
-        downsample = QCheckBox(tr("Reducir resolución de imágenes compatibles"))
-        compact = QCheckBox(tr("Comprimir más las fotos y los escaneos tonales"))
-        dpi = QSpinBox()
-        dpi.setRange(96, 1200)
-        dpi.setValue(150)
-        dpi.setSuffix(tr(" ppp"))
-        dpi.setToolTip(tr("Densidad mínima en la página para las imágenes que PDFiu remuestrea"))
-        layout.addRow(tr("Perfil"), profile)
-        layout.addRow(description)
-        layout.addRow(tr("Calidad JPEG"), quality)
-        layout.addRow(downsample)
-        layout.addRow(tr("Resolución mínima"), dpi)
-        layout.addRow(compact)
-
-        def update_profile():
-            index = profile.currentIndex()
-            descriptions = (
-                tr("Optimiza la estructura y elimina duplicados. Conserva los píxeles de las imágenes."),
-                tr("Recomprime JPEG compatibles a calidad 94. Conserva sus dimensiones y el dibujo vectorial."),
-                tr("Recomprime JPEG compatibles a calidad 90 y reduce imágenes compatibles hasta 200 ppp efectivos."),
-                tr("Ajusta la calidad JPEG y la resolución de las imágenes. Puedes activar la compresión adicional para fotos."),
-                tr("Reduce las imágenes compatibles hasta 150 ppp y comprime más las fotos. El texto y las líneas vectoriales se conservan."),
-                tr("Para enviar copias pequeñas. Reduce las imágenes compatibles hasta 96 ppp y usa JPEG de calidad 62 en las fotos. Pueden perderse detalles en planos escaneados."),
-            )
-            description.setText(descriptions[index])
-            quality.setEnabled(index == 3)
-            downsample.setEnabled(index == 3)
-            compact.setEnabled(index == 3)
-            dpi.setEnabled(index == 3 and downsample.isChecked())
-            if index in (1, 2, 4, 5):
-                quality_value, dpi_value = {1: (94, 150), 2: (90, 200), 4: (84, 150), 5: (62, 96)}[index]
-                quality.setValue(quality_value)
-                dpi.setValue(dpi_value)
-                downsample.setChecked(index != 1)
-                compact.setChecked(index in (4, 5))
-            elif index == 0:
-                downsample.setChecked(False)
-                compact.setChecked(False)
-
-        profile.currentIndexChanged.connect(update_profile)
-        downsample.toggled.connect(lambda checked: dpi.setEnabled(profile.currentIndex() == 3 and checked))
-        profile.setCurrentIndex(4)
-        if previous is not None:
-            index, saved_quality, saved_downsample, saved_dpi, saved_compact = previous
-            profile.setCurrentIndex(index)
-            quality.setValue(saved_quality)
-            downsample.setChecked(saved_downsample)
-            dpi.setValue(saved_dpi)
-            compact.setChecked(saved_compact)
-        choices = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
-        proceed = choices.addButton(tr("Comprimir ahora"), QDialogButtonBox.ButtonRole.AcceptRole)
-        proceed.setDefault(True)
-        estimate = choices.addButton(tr("Estimar tamaño"), QDialogButtonBox.ButtonRole.ActionRole)
-        estimate.clicked.connect(lambda: dialog.done(2))
-        choices.button(QDialogButtonBox.StandardButton.Cancel).setText(tr("Cancelar"))
-        choices.accepted.connect(dialog.accept)
-        choices.rejected.connect(dialog.reject)
-        layout.addRow(choices)
+        dialog = CompressDialog(self, previous=previous)
         decision = dialog.exec()
         if not decision:
             return
         source = self.path
-        label = profile.currentText()
-        settings = profile.currentIndex(), quality.value(), downsample.isChecked(), dpi.value(), compact.isChecked()
+        label = dialog.profile_label()
+        settings = dialog.current_settings()
         if decision == QDialog.DialogCode.Accepted:
             self.calculate_compression(label, settings)
             return
@@ -4661,10 +4604,15 @@ class PDFiu(QMainWindow):
 
     @staticmethod
     def compression_parameters(settings):
-        profile, quality, downsample, dpi, compact = settings
-        return {"quality": quality if profile else None,
-                "dpi": dpi if downsample else None,
-                "compact": compact}
+        lossless = bool(settings.get("lossless", False))
+        return {
+            "quality": None if lossless else int(settings.get("quality", 82)),
+            "dpi": None if (lossless or not settings.get("downsample", True)) else int(settings.get("dpi", 150)),
+            "compact": False if lossless else bool(settings.get("compact", True)),
+            "grayscale": False if lossless else bool(settings.get("grayscale", False)),
+            "strip_bloat": bool(settings.get("strip_bloat", True)),
+            "clean_metadata": bool(settings.get("clean_metadata", False)),
+        }
 
     def show_compression_estimate(self, profile, settings, result):
         before, estimate, sampled_pages, total_pages = result
@@ -4698,7 +4646,7 @@ class PDFiu(QMainWindow):
             self.show_compression_result(temporary, profile, settings, result)
 
         self.start_job(tr("Comprimiendo PDF…"), lambda progress: compress_copy(
-            source, temporary, fast=settings[0] == 5, allow_larger=True, progress=progress, **options,
+            source, temporary, fast=False, allow_larger=True, progress=progress, **options,
         ), done, cancellable=True)
 
     def show_compression_result(self, temporary, profile, settings, result):
@@ -5327,11 +5275,15 @@ class PDFiu(QMainWindow):
         formats = (("Word (.docx)", "docx"), ("Excel (.xlsx)", "xlsx"), ("CSV (.csv)", "csv"),
                    ("Markdown (.md)", "md"), (tr("Texto (.txt)"), "txt"))
         return [(f"{name}…", lambda kind=kind: self.export_pdf(kind)) for name, kind in formats] + [
-            (tr("Imagen PNG…"), lambda: self.export_pdf("png")), (tr("Copiar página al portapapeles"), self.copy_page),
+            (tr("Imagen PNG…"), lambda: self.export_pdf("png")),
+            (tr("PDF/A (archivo)…"), self.export_pdf_archive),
+            (tr("Copiar página como imagen"), self.copy_page),
         ]
 
     def update_export_menu(self, menu):
-        menu.actions()[-1].setVisible(not self.batch_selection_count())
+        single_only = not self.batch_selection_count()
+        for action in menu.actions()[-2:]:
+            action.setVisible(single_only)
 
     def export_pdf(self, kind):
         if not self.path or self.job is not None:

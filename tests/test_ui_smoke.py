@@ -65,6 +65,28 @@ class UiSmokeTests(unittest.TestCase):
         self.assertEqual(order, [1, 2, 3, 0])
         grid.close()
 
+    def test_compress_dialog_presets_and_advanced_toggle(self):
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtWidgets import QApplication
+        from pdfiu_dialogs import CompressDialog
+
+        app = QApplication.instance() or QApplication([])
+        dialog = CompressDialog(None)
+        try:
+            self.assertEqual(dialog.current_settings()["preset"], "recommended")
+            self.assertTrue(dialog.advanced_box.isHidden())
+            dialog.advanced_toggle.setChecked(True)
+            self.assertFalse(dialog.advanced_box.isHidden())
+            dialog.grayscale.setChecked(True)
+            self.assertEqual(dialog.current_settings()["preset"], "custom")
+            self.assertTrue(dialog.current_settings()["grayscale"])
+            dialog.apply_preset_index(2)
+            self.assertEqual(dialog.current_settings()["preset"], "extreme")
+            self.assertTrue(dialog.current_settings()["clean_metadata"])
+            self.assertFalse(dialog.current_settings()["grayscale"])
+        finally:
+            dialog.close()
+
 
 if __name__ == "__main__":
     unittest.main()
