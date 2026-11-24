@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QButtonGroup, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QDockWidget, QDoubleSpinBox, QFileDialog, QFormLayout,
     QFrame, QGraphicsDropShadowEffect, QGraphicsScene, QGraphicsView, QGridLayout, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget,
     QListWidgetItem, QMainWindow, QMenu, QMessageBox, QPlainTextEdit, QProgressBar, QProgressDialog, QPushButton, QScrollArea, QSizePolicy, QSpinBox,
-    QStackedWidget, QStyle, QStyledItemDelegate, QStyleOptionViewItem, QTabBar, QTabWidget, QTextBrowser, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
+    QSplitter, QStackedWidget, QStyle, QStyledItemDelegate, QStyleOptionViewItem, QTabBar, QTabWidget, QTextBrowser, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
 )
 
 from pdf_ops import (
@@ -38,7 +38,7 @@ from pdf_ops import (
     signature_boxes, signature_plan, signature_value, signature_widgets, split_pdf, surface_records, text_block_at, unlock_pdf,
     validate_signature_box, workspace_batch_copies,
 )
-from pdfiu_ui import ANNOTATION_CARD_ROLE, HeaderEditor, PageNavigator, PanelRail, SEARCH_EXCERPT_ROLE, STYLE, SearchResultDelegate, TourSpotlight, apply_theme, brand_icon, icon, signature_details_html, startup_screen, text_line_boxes
+from pdfiu_ui import ANNOTATION_CARD_ROLE, HeaderEditor, PageNavigator, PanelRail, SEARCH_EXCERPT_ROLE, STYLE, SearchResultDelegate, TourSpotlight, apply_theme, brand_icon, brand_pixmap, icon, signature_details_html, startup_screen, text_line_boxes
 from plan_tools import inspect_document, layer_list, layer_preview, measured_value, prepare_recipe
 from release_info import APP_NAME, APP_VERSION, STORE_PROTOCOL_URL, is_store_package, latest_release, update_channel
 from document_export import export_document, markdown_from_pdf
@@ -393,7 +393,7 @@ class PDFiu(QMainWindow):
         self.navigation.tabBar().setUsesScrollButtons(False)
         self.navigation.tabBar().setExpanding(False)
         self.navigation.tabBar().hide()
-        self.navigation.setFixedWidth(238)
+        self.navigation.setMinimumWidth(220)
         self.pages_panel = sidebar
         column = QVBoxLayout(sidebar)
         column.setContentsMargins(11, 13, 11, 12)
@@ -437,7 +437,8 @@ class PDFiu(QMainWindow):
         self.view.selection_finished.connect(self.show_selection_actions)
         self.view.text_selection_changed.connect(lambda selected: self.selection_tools.hide() if not selected else None)
         self.navigation_column = QWidget(objectName="navigationPanel")
-        self.navigation_column.setFixedWidth(self.navigation.minimumWidth())
+        self.navigation_column.setMinimumWidth(220)
+        self.navigation_column.setMaximumWidth(640)
         navigation_layout = QVBoxLayout(self.navigation_column)
         navigation_layout.setContentsMargins(0, 0, 0, 0)
         navigation_layout.setSpacing(0)
@@ -453,12 +454,9 @@ class PDFiu(QMainWindow):
         navigation_layout.addWidget(self.navigator_panel)
         navigation_layout.addWidget(self.navigation, 1)
         self.navigator_panel.hide()
-        self.navigation_shell = QWidget()
-        navigation_shell = QHBoxLayout(self.navigation_shell)
-        navigation_shell.setContentsMargins(0, 0, 0, 0)
-        navigation_shell.setSpacing(0)
         self.navigation_rail = PanelRail(objectName="navigationRail")
         self.navigation_rail.setFixedWidth(46)
+        self.navigation_shell = self.navigation_rail
         self.rail_layout = QVBoxLayout(self.navigation_rail)
         self.rail_layout.setContentsMargins(0, 8, 1, 6)
         self.rail_layout.setSpacing(4)
@@ -475,9 +473,7 @@ class PDFiu(QMainWindow):
         self.rail_sections.setSpacing(1)
         rail_scroll.setWidget(rail_sections)
         self.rail_layout.addWidget(rail_scroll, 1)
-        navigation_shell.addWidget(self.navigation_rail)
-        navigation_shell.addWidget(self.navigation_column)
-        body.addWidget(self.navigation_shell)
+        body.addWidget(self.navigation_rail)
         self.navigator_timer = QTimer(self, singleShot=True, interval=16)
         self.navigator_timer.timeout.connect(self.update_navigator)
         for scrollbar in (self.view.horizontalScrollBar(), self.view.verticalScrollBar()):
@@ -570,7 +566,15 @@ class PDFiu(QMainWindow):
         self.canvas.addWidget(self.empty_state)
         self.canvas.addWidget(self.view)
         viewer_layout.addWidget(self.canvas, 1)
-        body.addWidget(viewer_column, 1)
+        self.body_splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.body_splitter.setChildrenCollapsible(False)
+        self.body_splitter.setHandleWidth(4)
+        self.body_splitter.addWidget(self.navigation_column)
+        self.body_splitter.addWidget(viewer_column)
+        self.body_splitter.setStretchFactor(0, 0)
+        self.body_splitter.setStretchFactor(1, 1)
+        self.body_splitter.setSizes([260, 960])
+        body.addWidget(self.body_splitter, 1)
         body.addWidget(self.tools)
         layout.addLayout(body, 1)
         self.bookmark_filter = QLineEdit()
@@ -694,14 +698,40 @@ class PDFiu(QMainWindow):
         self.layer_timer = QTimer(self, singleShot=True, interval=170)
         self.layer_timer.timeout.connect(self.apply_layer_view)
         self.layers_list.itemChanged.connect(lambda _: self.layer_timer.start())
+        sig_bar = QWidget()
+        sig_bar_layout = QHBoxLayout(sig_bar)
+        sig_bar_layout.setContentsMargins(0, 0, 0, 0)
+        sig_bar_layout.setSpacing(6)
+        self.signature_summary = QLabel("", objectName="muted")
+        sig_bar_layout.addWidget(self.signature_summary, 1)
+        self.signature_details_toggle = QPushButton(tr("Ocultar detalles"))
+        self.signature_details_toggle.setCheckable(True)
+        self.signature_details_toggle.setChecked(True)
+        self.signature_details_toggle.setProperty("role", "flat")
+        self.signature_details_toggle.toggled.connect(self.toggle_signature_details)
+        sig_bar_layout.addWidget(self.signature_details_toggle)
+        self.signature_filter = QLineEdit()
+        self.signature_filter.setPlaceholderText(tr("Filtrar firmante o campo…"))
+        self.signature_filter.setClearButtonEnabled(True)
+        self.signature_filter.textChanged.connect(lambda _: self.populate_signatures_list())
         self.signatures_list = QListWidget()
         self.signatures_list.setWordWrap(True)
-        self.signatures_list.setMaximumHeight(120)
+        self.signatures_list.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        self.signatures_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.signatures_list.setItemDelegate(SearchResultDelegate(self.signatures_list))
         self.signature_info = QTextBrowser(objectName="signatureDetails")
         self.signature_info.setAccessibleName(tr("Datos del certificado"))
-        self.signatures_panel = self.navigation_panel("Firmas", self.signatures_list, self.signature_info)
-        self.signatures_list.currentRowChanged.connect(self.show_signature_details)
-        self.signatures_list.itemClicked.connect(lambda _: self.jump_to_signature(self.signatures_list.currentRow()))
+        self.signature_splitter = QSplitter(Qt.Orientation.Vertical)
+        self.signature_splitter.setChildrenCollapsible(False)
+        self.signature_splitter.setHandleWidth(5)
+        self.signature_splitter.addWidget(self.signatures_list)
+        self.signature_splitter.addWidget(self.signature_info)
+        self.signature_splitter.setStretchFactor(0, 3)
+        self.signature_splitter.setStretchFactor(1, 2)
+        self.signature_splitter.setSizes([280, 220])
+        self.signatures_panel = self.navigation_panel("Firmas", sig_bar, self.signature_filter, self.signature_splitter)
+        self.signatures_list.currentItemChanged.connect(lambda current, _: self.show_signature_details(current))
+        self.signatures_list.itemClicked.connect(lambda item: self.jump_to_signature(item))
         self.signature_cache_key, self.signature_data = None, []
         self.rail_buttons = {}
         for panel, label, glyph in (
@@ -1622,20 +1652,23 @@ class PDFiu(QMainWindow):
         outer.setContentsMargins(22, 22, 22, 22)
         outer.addStretch(1)
         card = QFrame(objectName="emptyCard")
-        card.setMaximumWidth(360)
+        card.setMinimumWidth(460)
+        card.setMaximumWidth(520)
         content = QVBoxLayout(card)
-        content.setContentsMargins(26, 26, 26, 24)
-        content.setSpacing(12)
+        content.setContentsMargins(34, 32, 34, 30)
+        content.setSpacing(14)
         preview = QLabel(objectName="emptyIcon")
         preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        preview.setFixedSize(55, 55)
-        preview.setPixmap(brand_icon("papel-en-vuelo").pixmap(45, 45))
+        preview.setFixedSize(58, 58)
+        preview.setProperty("brandMark", ("papel-en-vuelo", 44))
+        preview.setPixmap(brand_pixmap("papel-en-vuelo", 44))
         content.addWidget(preview)
         content.addWidget(QLabel(tr("Abre un PDF"), objectName="emptyHeading"))
         hint = QLabel(tr("Arrastra uno o varios PDF a esta ventana o elígelos de tu equipo."), objectName="muted")
         hint.setWordWrap(True)
         content.addWidget(hint)
         actions = QHBoxLayout()
+        actions.setSpacing(10)
         actions.addWidget(button("Abrir PDF", self.open_dialog, primary=True, glyph="folder-plus"))
         actions.addWidget(button("Unir varios PDF", self.merge_dialog, glyph="document"))
         actions.addStretch(1)
@@ -1643,7 +1676,8 @@ class PDFiu(QMainWindow):
         self.welcome_offer = QFrame(objectName="welcomeOffer")
         self.welcome_offer.setMinimumHeight(90)
         welcome = QVBoxLayout(self.welcome_offer)
-        welcome.setContentsMargins(0, 10, 0, 0)
+        welcome.setContentsMargins(0, 14, 0, 0)
+        welcome.setSpacing(8)
         introduction = QLabel(tr("¿Es tu primera vez? Prueba con dos PDF de ejemplo."), objectName="muted")
         introduction.setWordWrap(True)
         welcome.addWidget(introduction)
@@ -1656,11 +1690,11 @@ class PDFiu(QMainWindow):
         self.welcome_offer.setVisible(not self.preferences.value("ayuda/bienvenida_resuelta", False, type=bool))
         self.recent_offer = QFrame(objectName="welcomeOffer")
         recent = QVBoxLayout(self.recent_offer)
-        recent.setContentsMargins(0, 9, 0, 0)
-        recent.setSpacing(2)
+        recent.setContentsMargins(0, 14, 0, 0)
+        recent.setSpacing(6)
         recent.addWidget(QLabel(tr("Documentos recientes"), objectName="panelLabel"))
         self.recent_rows = QVBoxLayout()
-        self.recent_rows.setSpacing(2)
+        self.recent_rows.setSpacing(4)
         recent.addLayout(self.recent_rows)
         content.addWidget(self.recent_offer)
         self.refresh_recent_files()
@@ -1726,7 +1760,7 @@ class PDFiu(QMainWindow):
             item.setToolTip(str(path))
             item.setProperty("role", "flat")
             item.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
-            item.setText(item.fontMetrics().elidedText(item.text(), Qt.TextElideMode.ElideMiddle, 243))
+            item.setText(item.fontMetrics().elidedText(item.text(), Qt.TextElideMode.ElideMiddle, 385))
             item.clicked.connect(lambda checked=False, file=path: self.open_recent_file(file))
             self.recent_rows.addWidget(item)
         self.recent_offer.setMinimumHeight(28 + 35 * len(paths) if paths else 0)
@@ -5209,6 +5243,61 @@ class PDFiu(QMainWindow):
         except Exception as error:
             self.error(error)
 
+    def toggle_signature_details(self, visible):
+        self.signature_info.setVisible(visible)
+        self.signature_details_toggle.setText(tr("Ocultar detalles") if visible else tr("Ver detalles"))
+
+    def populate_signatures_list(self, select_field=None):
+        query = self.signature_filter.text().strip().casefold() if hasattr(self, "signature_filter") else ""
+        self.signatures_list.clear()
+        total = len(self.signature_data)
+        shown = 0
+        target_row = 0
+        for index, signature in enumerate(self.signature_data):
+            haystack = " ".join(str(signature.get(k) or "") for k in ("name", "identifier", "organization", "field_name", "signed_at")).casefold()
+            if query and query not in haystack:
+                continue
+            integrity = signature.get("integrity")
+            valid_now = signature.get("valid_now")
+            if integrity is False:
+                color, status = "#dc2626", tr("Alterada")
+            elif integrity is True and valid_now is True:
+                color, status = "#16a34a", tr("Íntegra · Vigente")
+            elif integrity is True and valid_now is False:
+                color, status = "#d97706", tr("Íntegra · Caducada")
+            elif integrity is True:
+                color, status = "#0284c7", tr("Íntegra")
+            else:
+                color, status = "#64748b", tr("Sin comprobar")
+            date_label = str(signature.get("signed_at") or "").split(" ")[0]
+            body = signature["name"]
+            if signature.get("identifier"):
+                body = f'{body}\n{signature["identifier"]}'
+            item = QListWidgetItem(body)
+            item.setData(Qt.ItemDataRole.UserRole, index)
+            item.setData(ANNOTATION_CARD_ROLE, {
+                "color": color,
+                "kind": status,
+                "page_label": date_label,
+                "text": body,
+            })
+            item.setToolTip(f'{signature["name"]} ({signature["field_name"]})\n{signature.get("signed_at") or ""}')
+            self.signatures_list.addItem(item)
+            if select_field and signature["field_name"] == select_field:
+                target_row = shown
+            shown += 1
+        if total == 0:
+            self.signature_summary.setText(tr("Sin firmas"))
+            self.signature_info.setPlainText(tr("Este PDF no contiene firmas digitales incrustadas."))
+        elif shown == 0:
+            self.signature_summary.setText(tr("0 de {0} firmas").format(total))
+            self.signature_info.setPlainText(tr("Ninguna firma coincide con el filtro."))
+        else:
+            self.signature_summary.setText(
+                tr("{0} firmas").format(total) if shown == total else tr("{0} de {1} firmas").format(shown, total)
+            )
+            self.signatures_list.setCurrentRow(target_row)
+
     def signature_explorer(self, field_name=None):
         if self.job is not None or not self.path:
             return
@@ -5219,27 +5308,22 @@ class PDFiu(QMainWindow):
         def show(signatures):
             self.signature_cache_key = source
             self.signature_data = signatures
-            self.signatures_list.clear()
-            for signature in signatures:
-                item = QListWidgetItem(f'{signature["name"]}\n{signature["signed_at"]}')
-                item.setToolTip(signature["field_name"])
-                self.signatures_list.addItem(item)
-            if signatures:
-                self.signatures_list.setCurrentRow(next((index for index, signature in enumerate(signatures)
-                                                        if signature["field_name"] == field_name), 0))
-            else:
-                self.signature_info.setPlainText(tr("Este PDF no contiene firmas digitales incrustadas."))
+            self.populate_signatures_list(select_field=field_name)
 
         if self.signature_cache_key == source:
             if field_name:
-                index = next((i for i, signature in enumerate(self.signature_data) if signature["field_name"] == field_name), -1)
-                if index >= 0:
-                    self.signatures_list.setCurrentRow(index)
+                for row in range(self.signatures_list.count()):
+                    item = self.signatures_list.item(row)
+                    idx = item.data(Qt.ItemDataRole.UserRole)
+                    if idx is not None and self.signature_data[idx]["field_name"] == field_name:
+                        self.signatures_list.setCurrentRow(row)
+                        break
             return
         if self.signature_strip.isHidden():
             show([])
             return
         self.signatures_list.clear()
+        self.signature_summary.setText("")
         self.signature_info.setPlainText(tr("Leyendo firmas del PDF…"))
 
         def inspect(_):
@@ -5253,13 +5337,15 @@ class PDFiu(QMainWindow):
             preserve_selection=True,
         )
 
-    def show_signature_details(self, index):
-        if 0 <= index < len(self.signature_data):
+    def show_signature_details(self, item):
+        index = item.data(Qt.ItemDataRole.UserRole) if item is not None else -1
+        if isinstance(index, int) and 0 <= index < len(self.signature_data):
             self.signature_info.setHtml(signature_details_html(self.signature_data[index]))
             self.signature_info.verticalScrollBar().setValue(0)
 
-    def jump_to_signature(self, index):
-        if self.job is not None or not 0 <= index < len(self.signature_data):
+    def jump_to_signature(self, item):
+        index = item.data(Qt.ItemDataRole.UserRole) if item is not None else -1
+        if self.job is not None or not isinstance(index, int) or not 0 <= index < len(self.signature_data):
             return
         name = self.signature_data[index]["field_name"]
         for page, source in enumerate(self.document_reader.pages):

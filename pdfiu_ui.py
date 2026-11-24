@@ -7,7 +7,7 @@ from pathlib import Path
 from PySide6.QtCore import QByteArray, QEvent, QPoint, QPointF, QRect, QRectF, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QGuiApplication, QIcon, QPainter, QPainterPath, QPalette, QPen, QPixmap, QTextCharFormat, QTextLayout, QTextOption
 from PySide6.QtSvg import QSvgRenderer
-from PySide6.QtWidgets import QComboBox, QFrame, QHBoxLayout, QPushButton, QSplashScreen, QStyle, QStyledItemDelegate, QStyleOptionViewItem, QTextEdit, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QComboBox, QFrame, QHBoxLayout, QLabel, QPushButton, QSplashScreen, QStyle, QStyledItemDelegate, QStyleOptionViewItem, QTextEdit, QVBoxLayout, QWidget
 
 from pdf_ops import HeaderRun
 
@@ -279,6 +279,20 @@ def text_line_boxes(rectangles):
 
 def brand_icon(name="pdfiu-app"):
     return QIcon(str(BRAND_PATH / f"{name}.svg"))
+
+
+def brand_pixmap(name="papel-en-vuelo", size=44):
+    source = (BRAND_PATH / f"{name}.svg").read_bytes()
+    if _active_theme == "dark" and name == "papel-en-vuelo":
+        source = source.replace(b"#182a3d", b"#dce8f5").replace(b"#317f72", b"#3da391")
+    renderer = QSvgRenderer(QByteArray(source))
+    dpr = 2
+    pixmap = QPixmap(size * dpr, size * dpr)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    with QPainter(pixmap) as painter:
+        renderer.render(painter, QRectF(0, 0, size * dpr, size * dpr))
+    pixmap.setDevicePixelRatio(dpr)
+    return pixmap
 
 
 def startup_screen(credit):
@@ -642,7 +656,7 @@ QFrame#signatureStrip { background: #edf4fb; border-bottom: 1px solid #dbe6f3; }
 QFrame#signatureStrip QLabel { color: #19483f; font-weight: 600; }
 QFrame#tourStrip { background: #edf7f0; border-bottom: 1px solid #dbe4ed; }
 QLabel#tourTitle { color: #19483f; font-weight: 700; }
-QFrame#welcomeOffer { border-top: 1px solid #dce6e1; }
+QFrame#welcomeOffer { background: transparent; border-top: 1px solid #dce6e1; }
 QFrame#shapePanel { background: #f6f8fc; border: 1px solid #e0e8e3; border-radius: 8px; }
 QFrame#shapePanel QCheckBox { background: transparent; }
 QLabel { background: transparent; }
@@ -799,7 +813,7 @@ QFrame#formStrip, QFrame#signatureStrip { background: #1b2a38; border-bottom: 1p
 QFrame#signatureStrip QLabel { color: #7dd3fc; font-weight: 600; }
 QFrame#tourStrip { background: #172b26; border-bottom: 1px solid #26483e; }
 QLabel#tourTitle { color: #6ee7b7; font-weight: 700; }
-QFrame#welcomeOffer { border-top: 1px solid #2b3440; }
+QFrame#welcomeOffer { background: transparent; border-top: 1px solid #2b3440; }
 QFrame#shapePanel { background: #1d2530; border: 1px solid #2b3440; border-radius: 8px; }
 QFrame#shapePanel QCheckBox { background: transparent; }
 QLabel { background: transparent; color: #e6edf3; }
@@ -816,7 +830,7 @@ QLabel#panelLabel { color: #9fb0c4; font-size: 12px; font-weight: 600; }
 QLabel#toolHeading, QLabel#resultHeading { color: #f0f6fc; font-size: 16px; font-weight: 650; }
 QLabel#toolScope { color: #6ee7b7; background: #17302a; padding: 7px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; }
 QLabel#emptyHeading { font-size: 29px; font-weight: 600; color: #f0f6fc; }
-QLabel#emptyIcon { background: #1a312b; border-radius: 15px; }
+QLabel#emptyIcon { background: #1e3531; border: 1px solid #2c4c46; border-radius: 15px; }
 QPushButton { padding: 7px 11px; min-height: 17px; border: 1px solid #303a47; border-radius: 7px; background: #222a35; color: #e6edf3; }
 QPushButton:hover { background: #2b3544; border-color: #3f4d60; }
 QPushButton:pressed { background: #1f3c36; }
@@ -933,6 +947,11 @@ def refresh_widget_icons(application):
             if isinstance(meta, tuple) and len(meta) == 4:
                 glyph, size, primary, filled = meta
                 widget.setIcon(icon(glyph, size, "#ffffff" if primary else None, filled_when_checked=filled))
+        elif isinstance(widget, QLabel):
+            mark = widget.property("brandMark")
+            if isinstance(mark, tuple) and len(mark) == 2:
+                name, size = mark
+                widget.setPixmap(brand_pixmap(name, size))
 
 
 def apply_theme(application, preference="system"):
