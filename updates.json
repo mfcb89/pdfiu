@@ -1,5 +1,5 @@
 {
-  "version": "0.12.0",
+  "version": "0.12.1",
   "url": "https://github.com/mfcb89/pdfiu/releases",
-  "notes": "Vista de doble página (Ctrl+2), pestañas desacoplables en nuevas ventanas, barra de búsqueda compacta (Ctrl+F), organizar páginas en cuadrícula, dividir PDF, soporte de certificados ECDSA en Windows y tema oscuro mejorado."
+  "notes": "Compresión PDF mejorada (3 niveles rápidos + opciones avanzadas, soporte ICC/CMYK/SMask/escala de grises y limpieza de metadatos), panel de herramientas reorganizado, panel lateral redimensionable, nuevo panel de Firmas con tarjetas y filtro, y diálogos modernizados."
 }

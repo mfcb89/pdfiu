@@ -4,7 +4,7 @@
 
 **Español** · [English](README.en.md)
 
-![Versión 0.12.0](https://img.shields.io/badge/version-0.12.0-2f7d6d?style=flat-square)
+![Versión 0.12.1](https://img.shields.io/badge/version-0.12.1-2f7d6d?style=flat-square)
 ![Licencia MIT](https://img.shields.io/badge/license-MIT-182a3d?style=flat-square)
 ![Windows x64](https://img.shields.io/badge/Windows-x64-294459?style=flat-square)
 ![100% local](https://img.shields.io/badge/privacidad-100%25%20local%20%C2%B7%20sin%20cuenta-317f72?style=flat-square)

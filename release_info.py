@@ -9,7 +9,7 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 
 APP_NAME = "PDFiu"
-APP_VERSION = "0.12.0"
+APP_VERSION = "0.12.1"
 STORE_ID = "9NK06R3SRRW3"
 STORE_PROTOCOL_URL = f"ms-windows-store://pdp/?productid={STORE_ID}"
 STORE_WEB_URL = f"https://apps.microsoft.com/detail/{STORE_ID}"

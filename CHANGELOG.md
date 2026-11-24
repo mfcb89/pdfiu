@@ -5,6 +5,19 @@ El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/
 
 ## [Sin publicar] / [Unreleased]
 
+## [0.12.1] - 2026-11-24
+
+### Añadido / Added
+- **Compresión PDF mejorada** con 3 niveles sencillos (*Baja · Alta calidad*, *Recomendada · Equilibrada* y *Extrema · Menor peso*) y sección plegable **Opciones avanzadas** (sin pérdida en imágenes, calidad JPEG, resolución máxima, escala de grises, eliminación de datos privados de edición `/PieceInfo`, miniaturas `/Thumb` y metadatos XMP).
+- Soporte de compresión y remuestreo para imágenes **`/ICCBased`**, **`CMYK`**, **`JPEG2000` (`/JPXDecode`)** y transparencias **`/SMask`** manteniendo el canal alfa.
+- **Panel lateral izquierdo redimensionable** arrastrando su borde (`QSplitter`) para **Páginas**, **Marcadores**, **Firmas**, **Archivos** y **Capas**.
+- **Panel de Firmas rediseñado** con tarjetas por estado/color (*Íntegra · Vigente*, *Caducada*, *Alterada*), filtro por firmante o campo, divisor vertical arrastrable entre la lista y los detalles y botón *Ocultar/Ver detalles*.
+- **Política de privacidad** bilingüe en [PRIVACY.md](PRIVACY.md) y 30 pruebas automatizadas.
+
+### Cambiado / Changed
+- **Panel de herramientas simplificado:** `Documento` ordenado por frecuencia real de uso (7 acciones claras), `PDF/A (archivo)…` y `Copiar página como imagen` en `Exportar`, y `Preparar copia para compartir…` accesible en `Proteger`.
+- **Pantalla de bienvenida y diálogos modernizados:** tarjeta inicial más ancha con márgenes cómodos, logotipo adaptado al modo oscuro, controles modernos (`QCheckBox`, `QRadioButton`, `QDoubleSpinBox`, tarjetas `dialogCard`) y anchos mínimos en todos los diálogos.
+
 ## [0.12.0] - 2026-11-23
 
 ### Añadido / Added
