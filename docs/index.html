@@ -158,6 +158,114 @@
     }
     .window-frame img { width: 100%; display: block; }
 
+    /* Hero Carousel */
+    .carousel-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .carousel-stage {
+      position: relative;
+      background: #0f1722;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      aspect-ratio: 16 / 9;
+    }
+    .carousel-stage img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      transition: opacity 0.2s ease;
+    }
+    .carousel-nav {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 42px;
+      height: 42px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.22);
+      background: rgba(15, 23, 34, 0.72);
+      color: #ffffff;
+      font-size: 22px;
+      line-height: 1;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(6px);
+      transition: background 0.15s, transform 0.15s;
+    }
+    .carousel-nav:hover { background: rgba(49, 127, 114, 0.92); transform: translateY(-50%) scale(1.06); }
+    .carousel-nav.prev { left: 14px; }
+    .carousel-nav.next { right: 14px; }
+    .carousel-counter {
+      position: absolute;
+      right: 16px;
+      bottom: 14px;
+      background: rgba(15, 23, 34, 0.78);
+      color: #dce8f5;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.16);
+    }
+    .carousel-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+    }
+    .carousel-tab {
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--muted);
+      font: inherit;
+      font-size: 13px;
+      font-weight: 550;
+      padding: 7px 13px;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .carousel-tab:hover { border-color: var(--accent); color: var(--ink); }
+    .carousel-tab.active {
+      background: var(--mint);
+      border-color: var(--accent);
+      color: #19483f;
+      font-weight: 650;
+    }
+
+    /* Visual Schematics */
+    .schematic-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 16px;
+    }
+    .schematic-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .schematic-card svg {
+      width: 100%;
+      height: auto;
+      display: block;
+      border-radius: 8px;
+      background: var(--surface-alt);
+      border: 1px solid var(--border);
+    }
+    .schematic-card h3 { margin: 0; font-size: 15.5px; font-weight: 650; }
+    .schematic-card p { margin: 0; font-size: 13.5px; color: var(--muted); }
+
     /* Sections */
     section { padding: 52px 0 0; }
     .section-head { margin-bottom: 24px; max-width: 640px; }
@@ -277,10 +385,10 @@
     footer a:hover { color: var(--ink); }
 
     /* Language toggle */
-    [data-lang="en"] { display: none; }
-    body.en [data-lang="es"] { display: none; }
-    body.en [data-lang="en"] { display: initial; }
-    body.en p[data-lang="en"], body.en ul[data-lang="en"], body.en div[data-lang="en"] { display: block; }
+    [data-lang="en"] { display: none !important; }
+    body.en [data-lang="es"] { display: none !important; }
+    body.en [data-lang="en"] { display: initial !important; }
+    body.en p[data-lang="en"], body.en ul[data-lang="en"], body.en div[data-lang="en"] { display: block !important; }
   </style>
 </head>
 <body>
@@ -346,10 +454,105 @@
         </div>
       </div>
 
-      <div class="window-frame">
-        <img id="heroShot" src="pdfiu-es.png" alt="Interfaz de escritorio de PDFiu">
+      <div class="carousel-wrap" aria-label="Galería de pantallas de PDFiu">
+        <div class="carousel-stage">
+          <img id="heroShot" src="slides/es/01-portada.webp" alt="Interfaz de escritorio de PDFiu">
+          <button class="carousel-nav prev" id="prevSlide" type="button" aria-label="Anterior">&#8249;</button>
+          <button class="carousel-nav next" id="nextSlide" type="button" aria-label="Siguiente">&#8250;</button>
+          <span class="carousel-counter" id="slideCounter">1 / 6</span>
+        </div>
+        <div class="carousel-tabs" id="carouselTabs">
+          <button class="carousel-tab active" data-slide="0" type="button"><span data-lang="es">Vista general</span><span data-lang="en">Overview</span></button>
+          <button class="carousel-tab" data-slide="1" type="button"><span data-lang="es">Compresión</span><span data-lang="en">Compression</span></button>
+          <button class="carousel-tab" data-slide="2" type="button"><span data-lang="es">Firmas (oscuro)</span><span data-lang="en">Signatures (dark)</span></button>
+          <button class="carousel-tab" data-slide="3" type="button"><span data-lang="es">Firma visual</span><span data-lang="en">Visual sign</span></button>
+          <button class="carousel-tab" data-slide="4" type="button"><span data-lang="es">Organizar páginas</span><span data-lang="en">Organize pages</span></button>
+          <button class="carousel-tab" data-slide="5" type="button"><span data-lang="es">Comparar y planos</span><span data-lang="en">Compare &amp; plans</span></button>
+        </div>
       </div>
     </div>
+
+    <section id="esquemas">
+      <div class="section-head">
+        <h2>
+          <span data-lang="es">Cómo funciona por dentro</span>
+          <span data-lang="en">How it works under the hood</span>
+        </h2>
+        <p data-lang="es">Tres pilares técnicos que diferencian a PDFiu de las webs en la nube y los editores por suscripción.</p>
+        <p data-lang="en">Three technical pillars that set PDFiu apart from cloud websites and subscription editors.</p>
+      </div>
+
+      <div class="schematic-grid">
+        <div class="schematic-card">
+          <svg viewBox="0 0 360 140" role="img" aria-label="Procesamiento 100% local">
+            <rect x="14" y="34" width="84" height="72" rx="10" fill="#ffffff" stroke="#c8d8d2" stroke-width="1.5"/>
+            <text x="56" y="66" text-anchor="middle" font-family="Segoe UI, Arial" font-size="13" font-weight="700" fill="#182a3d">PDF</text>
+            <text x="56" y="85" text-anchor="middle" font-family="Segoe UI, Arial" font-size="10" fill="#516472">Tu disco</text>
+            <path d="M102 70 H130" stroke="#317f72" stroke-width="2.5" stroke-linecap="round"/>
+            <polygon points="130,65 138,70 130,75" fill="#317f72"/>
+            <rect x="140" y="24" width="112" height="92" rx="12" fill="#182a3d"/>
+            <text x="196" y="54" text-anchor="middle" font-family="Segoe UI, Arial" font-size="13" font-weight="700" fill="#ffffff">PDFiu Local</text>
+            <text x="196" y="73" text-anchor="middle" font-family="Segoe UI, Arial" font-size="10" fill="#97d7c3">PDFium · OCR</text>
+            <text x="196" y="88" text-anchor="middle" font-family="Segoe UI, Arial" font-size="10" fill="#97d7c3">pyHanko · Qt</text>
+            <rect x="156" y="96" width="80" height="14" rx="7" fill="#2f7d6d"/>
+            <text x="196" y="106" text-anchor="middle" font-family="Segoe UI, Arial" font-size="8.5" font-weight="700" fill="#ffffff">0 KB A LA NUBE</text>
+            <path d="M256 70 H284" stroke="#317f72" stroke-width="2.5" stroke-linecap="round"/>
+            <polygon points="284,65 292,70 284,75" fill="#317f72"/>
+            <rect x="294" y="34" width="52" height="72" rx="10" fill="#dcf1e8" stroke="#317f72" stroke-width="1.5"/>
+            <text x="320" y="68" text-anchor="middle" font-family="Segoe UI, Arial" font-size="18" font-weight="700" fill="#19483f">✓</text>
+            <text x="320" y="88" text-anchor="middle" font-family="Segoe UI, Arial" font-size="9.5" font-weight="600" fill="#19483f">Listo</text>
+          </svg>
+          <h3><span data-lang="es">Privacidad real: 0 KB salen de tu PC</span><span data-lang="en">Real privacy: 0 KB leave your PC</span></h3>
+          <p data-lang="es">Desbloqueo, censura irreversible, firma y OCR se ejecutan localmente en tu CPU, sin cuentas ni límites de 3 tareas al día.</p>
+          <p data-lang="en">Unlocking, irreversible redaction, signing, and OCR run locally on your CPU—no accounts and no 3-task daily limits.</p>
+        </div>
+
+        <div class="schematic-card">
+          <svg viewBox="0 0 360 140" role="img" aria-label="Flujo de compresión inteligente">
+            <rect x="14" y="42" width="74" height="56" rx="9" fill="#ffffff" stroke="#c8d8d2" stroke-width="1.5"/>
+            <text x="51" y="67" text-anchor="middle" font-family="Segoe UI, Arial" font-size="13" font-weight="700" fill="#182a3d">14,2 MB</text>
+            <text x="51" y="84" text-anchor="middle" font-family="Segoe UI, Arial" font-size="9.5" fill="#516472">Original</text>
+            <path d="M92 70 H112" stroke="#317f72" stroke-width="2"/>
+            <polygon points="112,66 119,70 112,74" fill="#317f72"/>
+            <rect x="121" y="22" width="118" height="96" rx="10" fill="#ffffff" stroke="#317f72" stroke-width="1.5"/>
+            <text x="180" y="43" text-anchor="middle" font-family="Segoe UI, Arial" font-size="10.5" font-weight="700" fill="#19483f">1. Estimar ahorro</text>
+            <rect x="133" y="51" width="94" height="20" rx="5" fill="#edf7f3"/>
+            <text x="180" y="64" text-anchor="middle" font-family="Segoe UI, Arial" font-size="9.5" font-weight="600" fill="#182a3d">2. Baja · Rec. · Extrema</text>
+            <rect x="133" y="77" width="94" height="28" rx="5" fill="#182a3d"/>
+            <text x="180" y="94" text-anchor="middle" font-family="Segoe UI, Arial" font-size="9.5" font-weight="600" fill="#97d7c3">3. Comparar al 100 %</text>
+            <path d="M243 70 H263" stroke="#317f72" stroke-width="2"/>
+            <polygon points="263,66 270,70 263,74" fill="#317f72"/>
+            <rect x="272" y="42" width="74" height="56" rx="9" fill="#dcf1e8" stroke="#317f72" stroke-width="1.5"/>
+            <text x="309" y="67" text-anchor="middle" font-family="Segoe UI, Arial" font-size="13" font-weight="700" fill="#19483f">1,9 MB</text>
+            <text x="309" y="84" text-anchor="middle" font-family="Segoe UI, Arial" font-size="9.5" font-weight="600" fill="#2f7d6d">-86 % peso</text>
+          </svg>
+          <h3><span data-lang="es">Comprime sabiendo antes cuánto ahorras</span><span data-lang="en">Compress knowing your savings upfront</span></h3>
+          <p data-lang="es">Comprueba si merece la pena antes de procesar, limpia datos ocultos e imágenes ICC/CMYK/SMask y compara al 100 % antes de guardar.</p>
+          <p data-lang="en">Estimate savings before running, strip hidden bloat and ICC/CMYK/SMask images, and compare side by side at 100% before saving.</p>
+        </div>
+
+        <div class="schematic-card">
+          <svg viewBox="0 0 360 140" role="img" aria-label="Firma criptográfica, firma visual y comparación">
+            <rect x="14" y="20" width="142" height="44" rx="8" fill="#ffffff" stroke="#c8d8d2" stroke-width="1.5"/>
+            <text x="85" y="40" text-anchor="middle" font-family="Segoe UI, Arial" font-size="11" font-weight="700" fill="#182a3d">Certificado Windows / .pfx</text>
+            <text x="85" y="55" text-anchor="middle" font-family="Segoe UI, Arial" font-size="9.5" fill="#317f72">PAdES · RSA &amp; ECDSA · Lotes</text>
+            <rect x="14" y="76" width="142" height="44" rx="8" fill="#ffffff" stroke="#c8d8d2" stroke-width="1.5"/>
+            <text x="85" y="96" text-anchor="middle" font-family="Segoe UI, Arial" font-size="11" font-weight="700" fill="#182a3d">Firma visual PNG / JPG / PDF</text>
+            <text x="85" y="111" text-anchor="middle" font-family="Segoe UI, Arial" font-size="9.5" fill="#317f72">Quita fondo blanco al vuelo</text>
+            <path d="M160 42 H188 V70 H206 M160 98 H188 V70" fill="none" stroke="#317f72" stroke-width="2"/>
+            <polygon points="206,66 213,70 206,74" fill="#317f72"/>
+            <rect x="215" y="26" width="131" height="88" rx="10" fill="#182a3d"/>
+            <text x="280" y="54" text-anchor="middle" font-family="Segoe UI, Arial" font-size="12" font-weight="700" fill="#ffffff">Control total</text>
+            <text x="280" y="74" text-anchor="middle" font-family="Segoe UI, Arial" font-size="10" fill="#97d7c3">✓ Integridad verificable</text>
+            <text x="280" y="90" text-anchor="middle" font-family="Segoe UI, Arial" font-size="10" fill="#97d7c3">✓ Comparar 2 PDF en color</text>
+            <text x="280" y="106" text-anchor="middle" font-family="Segoe UI, Arial" font-size="10" fill="#97d7c3">✓ Censura irreversible</text>
+          </svg>
+          <h3><span data-lang="es">Firma legal, firma visual y revisión</span><span data-lang="en">Legal signing, visual stamps &amp; review</span></h3>
+          <p data-lang="es">Firma uno o varios PDF con tu certificado o estampa tu rúbrica desde imagen/PDF, y detecta cambios visuales entre dos versiones.</p>
+          <p data-lang="en">Sign single or batch PDFs with your certificate or stamp a signature from image/PDF, and spot visual differences between two versions.</p>
+        </div>
+      </div>
+    </section>
 
     <section id="funciones">
       <div class="section-head">
@@ -458,21 +661,6 @@
         <span><kbd>Ctrl+S</kbd> <span data-lang="es">Guardar directo</span><span data-lang="en">Direct save</span></span>
         <span><kbd>Ctrl+,</kbd> <span data-lang="es">Preferencias y tema</span><span data-lang="en">Preferences &amp; theme</span></span>
       </div>
-
-      <div class="section-head" style="margin-top: 40px;">
-        <h2>
-          <span data-lang="es">Pantallas reales de PDFiu</span>
-          <span data-lang="en">Real PDFiu screens</span>
-        </h2>
-        <p data-lang="es">Compresión con estimación previa, panel de firmas en tema oscuro, firma visual desde imagen o PDF y organización en cuadrícula.</p>
-        <p data-lang="en">Compression with size estimation, dark-mode signatures explorer, visual image/PDF signatures, and drag-and-drop page grid.</p>
-      </div>
-      <div class="dist-grid">
-        <div class="window-frame"><img src="screenshots/compress.png" alt="Comprimir PDF en PDFiu"></div>
-        <div class="window-frame"><img src="screenshots/signatures-dark.png" alt="Panel de firmas en modo oscuro"></div>
-        <div class="window-frame"><img src="screenshots/visual-sign.png" alt="Firma visual desde imagen o PDF"></div>
-        <div class="window-frame"><img src="screenshots/organize.png" alt="Organizar páginas en cuadrícula"></div>
-      </div>
     </section>
 
     <section id="descarga">
@@ -580,12 +768,55 @@
   </main>
 
   <script>
+    const slides = {
+      es: [
+        'slides/es/01-portada.webp',
+        'slides/es/02-comprimir.webp',
+        'slides/es/03-firmas-oscuro.webp',
+        'slides/es/04-firma-visual.webp',
+        'slides/es/05-organizar.webp',
+        'slides/es/06-comparar-planos.webp',
+      ],
+      en: [
+        'slides/en/01-overview.webp',
+        'slides/en/02-compress.webp',
+        'slides/en/03-signatures-dark.webp',
+        'slides/en/04-visual-signature.webp',
+        'slides/en/05-organize.webp',
+        'slides/en/06-compare-drawings.webp',
+      ],
+    };
+    let currentSlide = 0;
     const btn = document.getElementById('toggleLang');
     const shot = document.getElementById('heroShot');
+    const counter = document.getElementById('slideCounter');
+    const tabs = Array.from(document.querySelectorAll('.carousel-tab'));
+
+    function renderSlide() {
+      const lang = document.body.classList.contains('en') ? 'en' : 'es';
+      shot.src = slides[lang][currentSlide];
+      counter.textContent = `${currentSlide + 1} / ${slides[lang].length}`;
+      tabs.forEach((tab, idx) => tab.classList.toggle('active', idx === currentSlide));
+    }
+
+    document.getElementById('prevSlide').addEventListener('click', () => {
+      currentSlide = (currentSlide + 5) % 6;
+      renderSlide();
+    });
+    document.getElementById('nextSlide').addEventListener('click', () => {
+      currentSlide = (currentSlide + 1) % 6;
+      renderSlide();
+    });
+    tabs.forEach((tab) => {
+      tab.addEventListener('click', () => {
+        currentSlide = Number(tab.dataset.slide);
+        renderSlide();
+      });
+    });
     btn.addEventListener('click', () => {
       const isEn = document.body.classList.toggle('en');
       btn.textContent = isEn ? 'ES' : 'EN';
-      shot.src = isEn ? 'pdfiu-en.png' : 'pdfiu-es.png';
+      renderSlide();
     });
   </script>
 </body>
