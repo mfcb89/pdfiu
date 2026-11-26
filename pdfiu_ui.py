@@ -952,7 +952,7 @@ QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus, QComboBox:focus, QSpinBo
 QComboBox { padding-right: 26px; }
 QComboBox::drop-down { border: 0; width: 24px; subcontrol-origin: padding; subcontrol-position: top right; }
 QCheckBox, QRadioButton { spacing: 8px; color: #182a3d; background: transparent; }
-QCheckBox::indicator { width: 16px; height: 16px; border: 1.5px solid #9db0a8; border-radius: 4px; background: #fff; }
+QCheckBox::indicator { width: 16px; height: 16px; border: 1px solid #8fa69d; border-radius: 4px; background: #fff; }
 QCheckBox::indicator:hover { border-color: #317f72; }
 QCheckBox::indicator:checked { background: #317f72; border-color: #317f72; }
 QCheckBox::indicator:disabled { background: #eef2f0; border-color: #d2dcd8; }
@@ -1280,7 +1280,7 @@ QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus, QComboBox:focus, QSpinBo
 QComboBox { padding-right: 26px; }
 QComboBox::drop-down { border: 0; width: 24px; subcontrol-origin: padding; subcontrol-position: top right; }
 QCheckBox, QRadioButton { spacing: 8px; color: #e6edf3; background: transparent; }
-QCheckBox::indicator { width: 16px; height: 16px; border: 1.5px solid #4d5c70; border-radius: 4px; background: #141920; }
+QCheckBox::indicator { width: 16px; height: 16px; border: 1px solid #55667a; border-radius: 4px; background: #141920; }
 QCheckBox::indicator:hover { border-color: #4fb39d; }
 QCheckBox::indicator:checked { background: #2f7d6d; border-color: #4fb39d; }
 QCheckBox::indicator:disabled { background: #1b2028; border-color: #2b3440; }

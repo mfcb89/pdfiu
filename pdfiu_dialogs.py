@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from pdf_ops import load_stamp_image, pdfium_reader, project_signature_box, reader_for, render_page, signature_boxes, signature_plan
+import pdfiu_ui
 from pdfiu_ui import icon
 from pdfiu_views import PageView, as_qimage, button
 from translations import tr
@@ -807,7 +808,7 @@ class CommandPaletteDelegate(QStyledItemDelegate):
         rect = option.rect.adjusted(6, 2, -6, -2)
         selected = bool(option.state & QStyle.StateFlag.State_Selected)
         hovered = bool(option.state & QStyle.StateFlag.State_MouseOver)
-        is_dark = option.palette.base().color().lightness() < 128
+        is_dark = pdfiu_ui._active_theme == "dark"
 
         if selected:
             fill = QColor("#1d3c35") if is_dark else QColor("#dff1ea")

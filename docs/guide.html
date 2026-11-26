@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Guía de usuario — PDFiu | User Guide</title>
+  <meta name="description" content="Guía de usuario completa de PDFiu: lectura, HUD flotante, organizar y dividir páginas, compresión inteligente, firma electrónica PAdES, firma visual, OCR local, planos técnicos, censura irreversible y atajos.">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='10 10 90 82'%3E%3Cpath fill='%23182a3d' d='M16 13 55 36 64 44 74 29 84 28 94 37 83 41 76 61 62 75 23 87 36 68 16 56Z'/%3E%3Cpath fill='%23317f72' d='M16 13 52 36 65 49 36 68 16 56Z'/%3E%3Cpath fill='%2397d7c3' d='M16 13 52 36 36 43Z'/%3E%3C/svg%3E">
+  <style>
+    :root {
+      --bg: #fbfcfb;
+      --surface: #ffffff;
+      --surface-alt: #f3f7f5;
+      --ink: #182a3d;
+      --muted: #516472;
+      --border: #dce6e1;
+      --accent: #317f72;
+      --accent-soft: #e2f2eb;
+      --accent-ink: #19483f;
+      --warn-bg: #fff8eb;
+      --warn-border: #ead2a0;
+      --warn-ink: #6a4814;
+      --max: 1180px;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+      line-height: 1.65;
+      -webkit-font-smoothing: antialiased;
+    }
+    header {
+      position: sticky; top: 0; z-index: 30;
+      background: rgba(255, 255, 255, 0.92);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-bar {
+      max-width: var(--max); margin: 0 auto; padding: 14px 24px;
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    }
+    .brand-link {
+      display: inline-flex; align-items: center; gap: 10px;
+      text-decoration: none; color: var(--ink); font-weight: 700; font-size: 19px; letter-spacing: -0.02em;
+    }
+    .brand-link .iu { color: var(--accent); }
+    .brand-mark { width: 28px; height: 28px; }
+    nav { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+    nav a { text-decoration: none; color: var(--muted); font-size: 14px; font-weight: 500; }
+    nav a:hover { color: var(--ink); }
+    .lang-btn {
+      border: 1px solid var(--border); background: var(--surface); color: var(--ink);
+      border-radius: 999px; padding: 5px 12px; font-size: 12.5px; font-weight: 600; cursor: pointer;
+    }
+    .lang-btn:hover { background: var(--surface-alt); border-color: #b7d3c8; }
+
+    .guide-shell {
+      max-width: var(--max); margin: 0 auto; padding: 36px 24px 80px;
+      display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 40px; align-items: start;
+    }
+    aside.toc {
+      position: sticky; top: 82px;
+      padding: 18px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface);
+      max-height: calc(100vh - 104px); overflow-y: auto;
+    }
+    .toc-title {
+      font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+      color: var(--muted); margin: 0 0 10px;
+    }
+    .toc-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+    .toc-list a {
+      display: block; padding: 7px 10px; border-radius: 8px; text-decoration: none;
+      color: var(--muted); font-size: 13.5px; font-weight: 500; transition: background .15s, color .15s;
+    }
+    .toc-list a:hover { background: var(--surface-alt); color: var(--ink); }
+    .toc-list a.active { background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; }
+
+    article.content { min-width: 0; }
+    .guide-hero {
+      padding: 30px 32px; border-radius: 18px;
+      background: linear-gradient(135deg, #182a3d 0%, #204547 100%);
+      color: #fff; margin-bottom: 36px;
+    }
+    .guide-hero .eyebrow {
+      display: inline-block; font-size: 12px; font-weight: 600; padding: 4px 11px; border-radius: 999px;
+      background: rgba(151, 215, 195, 0.18); color: #a7ebda; margin-bottom: 12px;
+    }
+    .guide-hero h1 { margin: 0 0 10px; font-size: clamp(28px, 3.6vw, 38px); line-height: 1.15; letter-spacing: -0.025em; }
+    .guide-hero p { margin: 0; font-size: 15.5px; color: #d1e5df; max-width: 66ch; }
+
+    section.chapter {
+      padding: 32px 0; border-bottom: 1px solid var(--border); scroll-margin-top: 84px;
+    }
+    section.chapter:last-of-type { border-bottom: 0; }
+    .chapter-num {
+      display: inline-block; font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+      color: var(--accent-ink); background: var(--accent-soft); padding: 3px 10px; border-radius: 999px; margin-bottom: 8px;
+    }
+    section.chapter h2 { margin: 0 0 10px; font-size: 26px; letter-spacing: -0.02em; line-height: 1.2; }
+    section.chapter h3 { margin: 22px 0 8px; font-size: 17px; color: var(--ink); }
+    section.chapter p { margin: 0 0 12px; color: var(--muted); font-size: 15px; }
+    section.chapter ul, section.chapter ol { margin: 0 0 16px; padding-left: 20px; font-size: 14.5px; color: var(--ink); }
+    section.chapter li { margin-bottom: 7px; }
+
+    figure.shot {
+      margin: 18px 0 22px; border: 1px solid var(--border); border-radius: 14px; overflow: hidden;
+      background: var(--surface); box-shadow: 0 10px 26px rgba(24, 42, 61, 0.06);
+    }
+    figure.shot img { display: block; width: 100%; height: auto; }
+    figure.shot figcaption {
+      padding: 10px 16px; font-size: 13px; color: var(--muted);
+      background: var(--surface-alt); border-top: 1px solid var(--border);
+    }
+
+    .callout {
+      margin: 16px 0; padding: 14px 16px; border-radius: 12px;
+      border: 1px solid #c3e2d6; background: #f1f9f5; font-size: 14px; color: var(--accent-ink);
+    }
+    .callout.warn {
+      border-color: var(--warn-border); background: var(--warn-bg); color: var(--warn-ink);
+    }
+    .callout strong { display: block; margin-bottom: 3px; }
+
+    table.ref-table {
+      width: 100%; border-collapse: collapse; margin: 14px 0 20px; font-size: 14px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
+    }
+    table.ref-table th, table.ref-table td {
+      padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top;
+    }
+    table.ref-table th { background: var(--surface-alt); font-weight: 600; color: var(--ink); font-size: 13px; }
+    table.ref-table tr:last-child td { border-bottom: 0; }
+    code, kbd {
+      font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12.5px;
+      padding: 2px 6px; border-radius: 5px; background: var(--surface-alt); border: 1px solid var(--border); color: var(--ink);
+    }
+    kbd { background: #fff; box-shadow: 0 1px 0 var(--border); font-weight: 600; }
+
+    .status-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+    .dot-green { background: #1e8755; }
+    .dot-amber { background: #c57612; }
+    .dot-red { background: #c4323b; }
+
+    footer {
+      max-width: var(--max); margin: 0 auto; padding: 24px; border-top: 1px solid var(--border);
+      display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;
+      font-size: 13.5px; color: var(--muted);
+    }
+    footer a { color: var(--muted); text-decoration: none; }
+    footer a:hover { color: var(--ink); }
+
+    @media (max-width: 920px) {
+      .guide-shell { grid-template-columns: 1fr; padding-top: 22px; gap: 24px; }
+      aside.toc { position: static; max-height: none; }
+    }
+
+    /* Language toggle */
+    [data-lang="en"] { display: none !important; }
+    body.en [data-lang="es"] { display: none !important; }
+    body.en [data-lang="en"] { display: initial !important; }
+    body.en p[data-lang="en"], body.en ul[data-lang="en"], body.en ol[data-lang="en"],
+    body.en div[data-lang="en"], body.en table[data-lang="en"], body.en figcaption[data-lang="en"] { display: block !important; }
+    body.en table[data-lang="en"] { display: table !important; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="nav-bar">
+      <a class="brand-link" href="index.html">
+        <svg class="brand-mark" viewBox="10 10 90 82" aria-hidden="true">
+          <path fill="currentColor" d="M16 13 55 36 64 44 74 29 84 28 94 37 83 41 76 61 62 75 23 87 36 68 16 56Z"/>
+          <path fill="#317f72" d="M16 13 52 36 65 49 36 68 16 56Z"/>
+          <path fill="#97d7c3" d="M16 13 52 36 36 43Z"/>
+        </svg>
+        <span>PDF<span class="iu">iu</span></span>
+      </a>
+      <nav>
+        <a href="index.html"><span data-lang="es">← Volver al inicio</span><span data-lang="en">← Back to home</span></a>
+        <a href="https://apps.microsoft.com/detail/9NK06R3SRRW3">Microsoft Store</a>
+        <a href="https://github.com/mfcb89/pdfiu">GitHub</a>
+        <button class="lang-btn" id="toggleLang" type="button" aria-label="Switch language">EN</button>
+      </nav>
+    </div>
+  </header>
+
+  <div class="guide-shell">
+    <aside class="toc" aria-label="Índice de capítulos">
+      <p class="toc-title"><span data-lang="es">Contenido</span><span data-lang="en">Contents</span></p>
+      <ul class="toc-list">
+        <li><a href="#inicio"><span data-lang="es">1. Inicio y recientes</span><span data-lang="en">1. Getting started &amp; recents</span></a></li>
+        <li><a href="#lectura"><span data-lang="es">2. Lectura, HUD y enlaces</span><span data-lang="en">2. Reading, HUD &amp; links</span></a></li>
+        <li><a href="#organizar"><span data-lang="es">3. Organizar, unir y dividir</span><span data-lang="en">3. Organize, merge &amp; split</span></a></li>
+        <li><a href="#comprimir"><span data-lang="es">4. Compresión inteligente</span><span data-lang="en">4. Smart compression</span></a></li>
+        <li><a href="#firmas"><span data-lang="es">5. Firma con certificado (PAdES)</span><span data-lang="en">5. Certificate signing (PAdES)</span></a></li>
+        <li><a href="#firma-visual"><span data-lang="es">6. Firma visual (PNG/JPG/PDF)</span><span data-lang="en">6. Visual signature (PNG/JPG/PDF)</span></a></li>
+        <li><a href="#edicion"><span data-lang="es">7. Editar, anotar y formularios</span><span data-lang="en">7. Edit, annotate &amp; forms</span></a></li>
+        <li><a href="#ocr"><span data-lang="es">8. OCR local y exportación</span><span data-lang="en">8. Offline OCR &amp; export</span></a></li>
+        <li><a href="#planos"><span data-lang="es">9. Planos, escalas y comparar</span><span data-lang="en">9. Drawings, scale &amp; compare</span></a></li>
+        <li><a href="#atajos"><span data-lang="es">10. Privacidad, Ctrl+K y atajos</span><span data-lang="en">10. Privacy, Ctrl+K &amp; shortcuts</span></a></li>
+      </ul>
+    </aside>
+
+    <article class="content">
+      <div class="guide-hero">
+        <span class="eyebrow">PDFiu v0.12 · Windows x64 &amp; macOS</span>
+        <h1>
+          <span data-lang="es">Guía de usuario completa</span>
+          <span data-lang="en">Complete User Guide</span>
+        </h1>
+        <p data-lang="es">
+          Manual paso a paso de todas las herramientas de PDFiu. Todas las funciones se ejecutan 100 % en tu equipo, sin subir archivos a internet y con soporte completo para deshacer (Ctrl+Z).
+        </p>
+        <p data-lang="en">
+          Step-by-step walkthrough of every tool in PDFiu. Everything runs 100% locally on your computer with zero cloud uploads and full Undo support (Ctrl+Z).
+        </p>
+      </div>
+
+      <!-- CAPÍTULO 1 -->
+      <section class="chapter" id="inicio">
+        <span class="chapter-num"><span data-lang="es">Capítulo 1</span><span data-lang="en">Chapter 1</span></span>
+        <h2><span data-lang="es">Primeros pasos, pantalla de inicio y Mesa de trabajo</span><span data-lang="en">Getting started, welcome screen &amp; Workspace</span></h2>
+        <p data-lang="es">
+          Al abrir PDFiu verás una pantalla de bienvenida limpia desde la que puedes abrir un PDF, arrastrar uno o varios archivos directamente sobre la ventana, unir un expediente o retomar cualquiera de tus últimos documentos en un clic.
+        </p>
+        <p data-lang="en">
+          When you launch PDFiu you land on a clean welcome screen where you can open a PDF, drag and drop one or multiple files directly onto the window, merge a dossier, or reopen any recent document in one click.
+        </p>
+        <figure class="shot">
+          <img src="guide-shots/es/09-welcome-recent.webp?v=5" data-src-es="guide-shots/es/09-welcome-recent.webp?v=5" data-src-en="guide-shots/en/09-welcome-recent.webp?v=5" alt="Pantalla de inicio y documentos recientes">
+          <figcaption data-lang="es">Pantalla de inicio con tarjetas de Documentos recientes (muestra nombre, carpeta y tamaño del archivo).</figcaption>
+          <figcaption data-lang="en">Welcome screen with Recent documents cards showing filename, parent folder, and file size.</figcaption>
+        </figure>
+        <h3><span data-lang="es">Trabajar con varios PDF a la vez</span><span data-lang="en">Working with multiple PDFs at once</span></h3>
+        <ul data-lang="es">
+          <li><strong>Pestañas desacoplables:</strong> abre varios PDF y arrastra cualquier pestaña fuera de la ventana para ver dos documentos en monitores distintos.</li>
+          <li><strong>Mesa de trabajo (panel izquierdo → Archivos):</strong> marca las casillas de varios PDF para ejecutar acciones en lote (<em>Unir PDFs</em>, <em>OCR</em>, <em>Firmar con certificado</em>, <em>Numerar páginas</em> o <em>Exportar</em>).</li>
+          <li><strong>Recuperación automática:</strong> si Windows se reinicia con cambios sin guardar, PDFiu detecta la sesión interrumpida al volver a abrirse.</li>
+        </ul>
+        <ul data-lang="en">
+          <li><strong>Detachable tabs:</strong> open multiple PDFs and drag any tab outside the window to view documents side by side or across monitors.</li>
+          <li><strong>Workspace (left panel → Files):</strong> tick checkboxes on multiple PDFs to run batch actions (<em>Merge PDFs</em>, <em>OCR</em>, <em>Certificate signing</em>, <em>Page numbering</em>, or <em>Export</em>).</li>
+          <li><strong>Crash recovery:</strong> if your PC restarts with unsaved edits, PDFiu offers to recover the interrupted session on next launch.</li>
+        </ul>
+      </section>
+
+      <!-- CAPÍTULO 2 -->
+      <section class="chapter" id="lectura">
+        <span class="chapter-num"><span data-lang="es">Capítulo 2</span><span data-lang="en">Chapter 2</span></span>
+        <h2><span data-lang="es">Lectura, barra flotante (HUD), enlaces e índices</span><span data-lang="en">Reading, floating HUD, internal links &amp; Focus mode</span></h2>
+        <p data-lang="es">
+          PDFiu renderiza cada página con <strong>PDFium</strong> a resolución completa mientras haces zoom, manteniendo el espacio de lectura despejado gracias a la cápsula flotante inferior.
+        </p>
+        <p data-lang="en">
+          PDFiu renders pages using native <strong>PDFium</strong> with crisp zoom resolution while keeping your document uncluttered through the floating bottom HUD pill.
+        </p>
+        <figure class="shot">
+          <img src="guide-shots/es/01-workspace.webp?v=5" data-src-es="guide-shots/es/01-workspace.webp?v=5" data-src-en="guide-shots/en/01-workspace.webp?v=5" alt="Espacio de trabajo y barra flotante HUD">
+          <figcaption data-lang="es">Interfaz principal con el rail izquierdo, barra flotante HUD centrada abajo y panel de Herramientas con buscador Ctrl+K.</figcaption>
+          <figcaption data-lang="en">Main workspace featuring the left icon rail, floating bottom HUD pill, and right Tools panel with Ctrl+K quick search.</figcaption>
+        </figure>
+        <ul data-lang="es">
+          <li><strong>Barra flotante (HUD):</strong> se mantiene semitransparente (~42 %) para no tapar el texto al leer y sube suavemente al 100 % al acercar el ratón o cambiar de página/zoom. Desde ella puedes escribir un número de página, abrir presets de zoom (50 % – 200 %), ajustar a <strong>Ancho</strong> o <strong>Página</strong>, activar <strong>Doble</strong> página y <strong>Girar</strong>.</li>
+          <li><strong>Índices y enlaces internos:</strong> al pasar el cursor por cualquier entrada de índice o enlace dentro del PDF, PDFiu resalta el recuadro exacto y muestra una cápsula flotante (<code>Página 6</code>) antes de saltar con un clic.</li>
+          <li><strong>Modo Enfoque (<code>F9</code>) y Pantalla completa (<code>F11</code>):</strong> oculta suavemente ambos paneles laterales para concentrarte en la lectura.</li>
+          <li><strong>Paneles laterales redimensionables:</strong> arrastra el borde derecho del panel izquierdo (<em>Archivos, Miniaturas, Marcadores, Capas, Anotaciones, Firmas</em>) para darle más ancho cuando revises índices largos o certificados.</li>
+        </ul>
+        <ul data-lang="en">
+          <li><strong>Floating HUD pill:</strong> stays subtle (~42% opacity) while reading so it never blocks text, and smoothly wakes to 100% on hover or page/zoom changes. Jump to any page, pick zoom presets (50%–200%), click <strong>Width</strong>, <strong>Page</strong>, <strong>Two-page</strong>, or <strong>Rotate</strong>.</li>
+          <li><strong>Internal links &amp; TOC highlighting:</strong> hovering any clickable index entry or link highlights its exact bounding box and shows a floating destination pill (<code>Page 6</code>) before jumping on click.</li>
+          <li><strong>Focus mode (<code>F9</code>) &amp; Full screen (<code>F11</code>):</strong> smoothly slides away sidebars for distraction-free reading.</li>
+          <li><strong>Resizable navigation sidebar:</strong> drag the splitter handle to widen <em>Files, Thumbnails, Bookmarks, Layers, Annotations, or Signatures</em>.</li>
+        </ul>
+      </section>
+
+      <!-- CAPÍTULO 3 -->
+      <section class="chapter" id="organizar">
+        <span class="chapter-num"><span data-lang="es">Capítulo 3</span><span data-lang="en">Chapter 3</span></span>
+        <h2><span data-lang="es">Organizar páginas, unir expedientes y dividir PDF</span><span data-lang="en">Organize pages, merge dossiers &amp; split PDFs</span></h2>
+        <p data-lang="es">
+          Todas las operaciones estructurales sobre páginas se encuentran en la categoría <strong>Documento</strong> del panel derecho y soportan deshacer instantáneo con <code>Ctrl+Z</code>.
+        </p>
+        <p data-lang="en">
+          All page-level operations live under the <strong>Document</strong> tab in the right panel and support instant Undo via <code>Ctrl+Z</code>.
+        </p>
+        <figure class="shot">
+          <img src="guide-shots/es/05-organize.webp?v=5" data-src-es="guide-shots/es/05-organize.webp?v=5" data-src-en="guide-shots/en/05-organize.webp?v=5" alt="Organizar páginas en cuadrícula">
+          <figcaption data-lang="es">Cuadrícula visual de Organizar páginas: arrastra miniaturas para reordenar, gira 90° o elimina páginas seleccionadas.</figcaption>
+          <figcaption data-lang="en">Visual Page Organizer grid: drag thumbnails to reorder, rotate 90°, or delete selected pages.</figcaption>
+        </figure>
+        <ol data-lang="es">
+          <li><strong>Organizar páginas…:</strong> abre la cuadrícula visual, arrastra cualquier página a su nueva posición, gira o borra varias a la vez y pulsa <em>Aplicar cambios</em>.</li>
+          <li><strong>Unir PDFs:</strong> selecciona los archivos (o márcalos en la Mesa de trabajo), ajusta el orden y PDFiu genera un único PDF conservando marcadores e índice automático.</li>
+          <li><strong>Dividir PDF…:</strong> divide automáticamente el documento cada <em>N</em> páginas en la carpeta que elijas con prefijo personalizado.</li>
+          <li><strong>Más herramientas:</strong> incluye <em>Extraer páginas…</em> (ej. <code>1-3, 7, 10-12</code>), <em>Varias páginas por hoja…</em> (2, 4, 6, 9 o 16 por hoja) y <em>Proceso de expediente…</em>.</li>
+        </ol>
+        <ol data-lang="en">
+          <li><strong>Organize pages…:</strong> open the thumbnail grid, drag any page into place, rotate or remove multiple pages, and click <em>Apply changes</em>.</li>
+          <li><strong>Merge PDFs:</strong> choose files (or check them in Workspace), reorder as needed, and PDFiu creates a single merged PDF with an automatic outline.</li>
+          <li><strong>Split PDF…:</strong> split the document into independent files every <em>N</em> pages in your chosen folder with a custom filename prefix.</li>
+          <li><strong>More tools:</strong> includes <em>Extract pages…</em> (e.g. <code>1-3, 7, 10-12</code>), <em>Multiple pages per sheet…</em> (2, 4, 6, 9, or 16-up), and <em>Dossier recipe…</em>.</li>
+        </ol>
+        <figure class="shot">
+          <img src="guide-shots/es/08-split.webp?v=5" data-src-es="guide-shots/es/08-split.webp?v=5" data-src-en="guide-shots/en/08-split.webp?v=5" alt="Diálogo Dividir PDF">
+          <figcaption data-lang="es">Diálogo Dividir PDF con vista previa inmediata de cuántos archivos se crearán.</figcaption>
+          <figcaption data-lang="en">Split PDF dialog with live preview of how many output files will be created.</figcaption>
+        </figure>
+      </section>
+
+      <!-- CAPÍTULO 4 -->
+      <section class="chapter" id="comprimir">
+        <span class="chapter-num"><span data-lang="es">Capítulo 4</span><span data-lang="en">Chapter 4</span></span>
+        <h2><span data-lang="es">Compresión inteligente y estimador de tamaño</span><span data-lang="en">Smart PDF compression &amp; upfront size estimator</span></h2>
+        <p data-lang="es">
+          A diferencia de los compresores web que suben tus archivos y degradan el texto, PDFiu mantiene el texto vectorial y las líneas CAD intactas mientras recomprime de forma inteligente imágenes <strong>RGB, CMYK, ICCBased, JPEG2000 (JPX) y canales alfa (SMask)</strong>, además de limpiar datos ocultos de programas de edición.
+        </p>
+        <p data-lang="en">
+          Unlike cloud compressors that upload your files and blur text, PDFiu keeps vector text and CAD lines razor sharp while intelligently recompressing <strong>RGB, CMYK, ICCBased, JPEG2000 (JPX), and SMask alpha images</strong> and stripping hidden editing bloat.
+        </p>
+        <figure class="shot">
+          <img src="guide-shots/es/02-compress.webp?v=5" data-src-es="guide-shots/es/02-compress.webp?v=5" data-src-en="guide-shots/en/02-compress.webp?v=5" alt="Diálogo Comprimir PDF">
+          <figcaption data-lang="es">Los 3 niveles rápidos de compresión más las Opciones avanzadas desplegadas.</figcaption>
+          <figcaption data-lang="en">Three one-click compression presets plus expanded Advanced options.</figcaption>
+        </figure>
+        <table class="ref-table" data-lang="es">
+          <thead><tr><th>Nivel</th><th>Resolución</th><th>Cuándo usarlo</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Compresión baja · Alta calidad</strong></td><td>200 ppp</td><td>Impresión, planos técnicos o informes con fotos detalladas.</td></tr>
+            <tr><td><strong>Compresión recomendada · Equilibrada</strong></td><td>150 ppp</td><td>Uso diario: máximo equilibrio entre ligereza y nitidez en pantalla.</td></tr>
+            <tr><td><strong>Compresión extrema · Menor peso</strong></td><td>96 ppp</td><td>Envío por correo o portales oficiales con límite estricto de MB.</td></tr>
+          </tbody>
+        </table>
+        <table class="ref-table" data-lang="en">
+          <thead><tr><th>Preset</th><th>Resolution</th><th>Best for</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Low compression · High quality</strong></td><td>200 dpi</td><td>Printing, architectural drawings, and high-detail reports.</td></tr>
+            <tr><td><strong>Recommended · Balanced</strong></td><td>150 dpi</td><td>Everyday sharing: ideal balance of small size and sharp visuals.</td></tr>
+            <tr><td><strong>Extreme compression · Smallest size</strong></td><td>96 dpi</td><td>Email attachments and portals with strict MB upload limits.</td></tr>
+          </tbody>
+        </table>
+        <div class="callout">
+          <strong data-lang="es">Consejo: estima y compara al 100 % antes de guardar</strong>
+          <strong data-lang="en">Tip: estimate &amp; compare at 100% before saving</strong>
+          <span data-lang="es">Pulsa <strong>Estimar tamaño</strong> para ver al instante el ahorro aproximado. Después de comprimir, PDFiu muestra la vista previa lado a lado al 100 % para que confirmes la calidad antes de guardar la copia.</span>
+          <span data-lang="en">Click <strong>Estimate size</strong> to preview approximate savings first. After compressing, PDFiu shows a 100% side-by-side comparison so you can verify quality before saving.</span>
+        </div>
+      </section>
+
+      <!-- CAPÍTULO 5 -->
+      <section class="chapter" id="firmas">
+        <span class="chapter-num"><span data-lang="es">Capítulo 5</span><span data-lang="en">Chapter 5</span></span>
+        <h2><span data-lang="es">Firma electrónica con certificado (PAdES) y verificador</span><span data-lang="en">Cryptographic certificate signing (PAdES) &amp; verifier</span></h2>
+        <p data-lang="es">
+          PDFiu firma PDFs con estándar <strong>PAdES</strong> (compatible con Adobe Acrobat, AutoFirma y administraciones públicas) utilizando certificados del almacén de Windows (FNMT, DNIe, AC Representación, etc.) o archivos <code>.pfx</code>/<code>.p12</code> con claves <strong>RSA</strong> y <strong>ECDSA</strong>.
+        </p>
+        <p data-lang="en">
+          PDFiu creates standards-compliant <strong>PAdES</strong> signatures using certificates from the Windows certificate store or <code>.pfx</code>/<code>.p12</code> files supporting both <strong>RSA</strong> and <strong>ECDSA</strong> keys.
+        </p>
+        <figure class="shot">
+          <img src="guide-shots/es/03-signatures-dark.webp?v=5" data-src-es="guide-shots/es/03-signatures-dark.webp?v=5" data-src-en="guide-shots/en/03-signatures-dark.webp?v=5" alt="Panel de firmas en modo oscuro">
+          <figcaption data-lang="es">Panel lateral Firmas en modo oscuro con filtro rápido, tarjetas con estado y detalle criptográfico completo.</figcaption>
+          <figcaption data-lang="en">Signatures sidebar in Dark Mode with live filter, color-coded cards, and full certificate inspection.</figcaption>
+        </figure>
+        <h3><span data-lang="es">Cómo firmar uno o varios documentos</span><span data-lang="en">How to sign single or multiple documents</span></h3>
+        <ol data-lang="es">
+          <li>Abre <strong>Herramientas → Firmar → Firmar con certificado</strong>.</li>
+          <li>Arrastra un recuadro sobre la página donde quieras mostrar el sello de firma y elige si aplicarlo solo en esta página o en todas.</li>
+          <li>Selecciona tu certificado de Windows o archivo <code>.pfx</code>/<code>.p12</code>, introduce el PIN si lo solicita y guarda el PDF firmado.</li>
+          <li>Para firmar decenas de PDF a la vez, usa <strong>Firmar lote…</strong> (o marca varios documentos en la Mesa de trabajo).</li>
+        </ol>
+        <ol data-lang="en">
+          <li>Open <strong>Tools → Sign → Sign with a certificate</strong>.</li>
+          <li>Drag a rectangle on the page and choose whether to sign just this page or every page.</li>
+          <li>Pick your Windows certificate or <code>.pfx</code>/<code>.p12</code> file, enter your PIN if prompted, and save the signed copy.</li>
+          <li>To sign dozens of PDFs at once, use <strong>Batch sign…</strong> (or tick multiple files in Workspace).</li>
+        </ol>
+        <h3><span data-lang="es">Cómo leer los estados del panel Firmas</span><span data-lang="en">Understanding signature statuses</span></h3>
+        <ul data-lang="es">
+          <li><span class="status-dot dot-green"></span><strong>Certificado vigente:</strong> los bytes firmados están íntegros y el certificado está dentro de su periodo de validez hoy.</li>
+          <li><span class="status-dot dot-amber"></span><strong>Vigente en la fecha de firma (certificado hoy caducado):</strong> la firma es <strong>real e íntegra</strong> y el certificado estaba vigente cuando se firmó el documento, aunque haya caducado posteriormente.</li>
+          <li><span class="status-dot dot-red"></span><strong>Integridad fallida / modificado:</strong> el PDF se alteró después de la firma y el sello ya no coincide con los bytes firmados.</li>
+        </ul>
+        <ul data-lang="en">
+          <li><span class="status-dot dot-green"></span><strong>Certificate valid:</strong> signed bytes are intact and the certificate is currently within its validity period.</li>
+          <li><span class="status-dot dot-amber"></span><strong>Valid at signing time (certificate now expired):</strong> the signature is <strong>real and intact</strong> and was valid when signed, even though the certificate expired later.</li>
+          <li><span class="status-dot dot-red"></span><strong>Integrity check failed:</strong> the PDF was altered after signing and no longer matches the signed bytes.</li>
+        </ul>
+      </section>
+
+      <!-- CAPÍTULO 6 -->
+      <section class="chapter" id="firma-visual">
+        <span class="chapter-num"><span data-lang="es">Capítulo 6</span><span data-lang="en">Chapter 6</span></span>
+        <h2><span data-lang="es">Firma visual con imagen (PNG, JPG, WebP) o PDF</span><span data-lang="en">Visual signature from PNG, JPG, WebP, or PDF</span></h2>
+        <p data-lang="es">
+          Cuando un documento no exige certificado criptográfico y solo necesitas estampar tu rúbrica manuscrita o un sello de empresa, usa <strong>Firma visual (imagen/PDF)…</strong>. PDFiu recuerda automáticamente el último archivo de firma que utilizaste.
+        </p>
+        <p data-lang="en">
+          When a form doesn't require a cryptographic certificate and you just need to stamp your handwritten signature or company seal, use <strong>Visual signature (image/PDF)…</strong>. PDFiu remembers your last signature file automatically.
+        </p>
+        <figure class="shot">
+          <img src="guide-shots/es/04-visual-signature.webp?v=5" data-src-es="guide-shots/es/04-visual-signature.webp?v=5" data-src-en="guide-shots/en/04-visual-signature.webp?v=5" alt="Firma visual PNG JPG PDF">
+          <figcaption data-lang="es">Diálogo de Firma visual con eliminación automática de fondo blanco y vista previa en vivo.</figcaption>
+          <figcaption data-lang="en">Visual Signature dialog with automatic white background removal and live preview.</figcaption>
+        </figure>
+        <ol data-lang="es">
+          <li>En el panel derecho entra en <strong>Firmar → Firma visual (imagen/PDF)…</strong>.</li>
+          <li>Pulsa <strong>Elegir archivo…</strong> y selecciona tu firma en <code>PNG</code>, <code>JPG</code>, <code>WebP</code>, <code>BMP</code> o <code>PDF</code>.</li>
+          <li>Mantén marcada la casilla <strong>Quitar fondo blanco automáticamente</strong> para que solo quede la tinta sobre el papel.</li>
+          <li>Pulsa <strong>Colocar en el PDF</strong> y dibuja con el ratón el recuadro exacto donde quieres estamparla. Si no te encaja el tamaño, pulsa <code>Ctrl+Z</code> y vuelve a colocarla.</li>
+        </ol>
+        <ol data-lang="en">
+          <li>Open <strong>Sign → Visual signature (image/PDF)…</strong> in the right panel.</li>
+          <li>Click <strong>Choose file…</strong> and pick your signature as <code>PNG</code>, <code>JPG</code>, <code>WebP</code>, <code>BMP</code>, or <code>PDF</code>.</li>
+          <li>Keep <strong>Remove white background automatically</strong> checked so only crisp ink sits over the page.</li>
+          <li>Click <strong>Place on PDF</strong> and drag a rectangle where you want to stamp it. Press <code>Ctrl+Z</code> anytime to undo and reposition.</li>
+        </ol>
+      </section>
+
+      <!-- CAPÍTULO 7 -->
+      <section class="chapter" id="edicion">
+        <span class="chapter-num"><span data-lang="es">Capítulo 7</span><span data-lang="en">Chapter 7</span></span>
+        <h2><span data-lang="es">Editar texto, anotar y rellenar formularios</span><span data-lang="en">Edit text, annotate &amp; fill forms</span></h2>
+        <ul data-lang="es">
+          <li><strong>Editar texto y Añadir texto (pestaña Editar):</strong> haz clic sobre un bloque existente para corregirlo directamente en la página o inserta texto nuevo en cualquier punto.</li>
+          <li><strong>Encabezados, pies y numeración:</strong> añade títulos, fecha o <code>Página {página} de {total}</code> con negrita, cursiva y fuente seleccionable en todo el documento o en lote.</li>
+          <li><strong>Formularios PDF (AcroForm):</strong> PDFiu detecta automáticamente campos rellenables con una barra azul superior; rellena casillas y campos haciendo clic, limpia respuestas o usa <strong>Fijar respuestas en el PDF…</strong> para dejarlos inmutables antes de enviar.</li>
+          <li><strong>Anotaciones (pestaña Anotar):</strong> resalta o subraya texto seleccionado, añade notas adhesivas, dibuja rectángulos, óvalos, líneas y flechas con color/grosor/opacidad, y gestiona todos tus comentarios desde el panel lateral <strong>Anotaciones</strong>.</li>
+        </ul>
+        <ul data-lang="en">
+          <li><strong>Edit text &amp; Add text (Edit tab):</strong> click an existing text block to edit inline or place new text anywhere on the page.</li>
+          <li><strong>Headers, footers &amp; page numbering:</strong> insert titles or <code>Page {page} of {total}</code> with bold, italic, and font controls across one or many PDFs.</li>
+          <li><strong>PDF Forms (AcroForm):</strong> fillable fields are detected automatically with a top strip; fill fields inline, clear responses, or use <strong>Flatten responses into PDF…</strong> before sharing.</li>
+          <li><strong>Annotations (Annotate tab):</strong> highlight or underline selected text, add sticky notes, draw rectangles, ovals, lines, and arrows with custom color/width/opacity, and review everything in the <strong>Annotations</strong> sidebar.</li>
+        </ul>
+      </section>
+
+      <!-- CAPÍTULO 8 -->
+      <section class="chapter" id="ocr">
+        <span class="chapter-num"><span data-lang="es">Capítulo 8</span><span data-lang="en">Chapter 8</span></span>
+        <h2><span data-lang="es">Reconocimiento de texto (OCR) y exportación</span><span data-lang="en">Offline OCR &amp; document export</span></h2>
+        <p data-lang="es">
+          Si recibes un PDF escaneado como imagen en el que no puedes seleccionar ni buscar texto, ejecuta <strong>Documento → Reconocer texto (OCR)</strong>. PDFiu incluye Tesseract en local (español e inglés) e incrusta una capa de texto invisible debajo del escaneo sin alterar el aspecto original.
+        </p>
+        <p data-lang="en">
+          When you receive a scanned image-only PDF where text cannot be selected or searched, run <strong>Document → Recognize text (OCR)</strong>. PDFiu bundles offline Tesseract (English &amp; Spanish) and embeds a searchable text layer without changing page appearance.
+        </p>
+        <h3><span data-lang="es">Formatos de exportación disponibles (Documento → Exportar)</span><span data-lang="en">Available export formats (Document → Export)</span></h3>
+        <ul data-lang="es">
+          <li><strong>Word (<code>.docx</code>), Excel (<code>.xlsx</code>), Markdown (<code>.md</code>) y Texto plano (<code>.txt</code>):</strong> extrae texto y tablas directamente a formatos editables.</li>
+          <li><strong>Imágenes PNG / JPG y Copiar página como imagen (<code>Ctrl+Shift+C</code>):</strong> ideal para pegar una página o detalle directamente en informes o presentaciones.</li>
+          <li><strong>PDF/A de archivo:</strong> convierte y valida el documento para conservación a largo plazo con Ghostscript + veraPDF.</li>
+        </ul>
+        <ul data-lang="en">
+          <li><strong>Word (<code>.docx</code>), Excel (<code>.xlsx</code>), Markdown (<code>.md</code>), and Plain text (<code>.txt</code>):</strong> extract readable text and tables locally.</li>
+          <li><strong>PNG / JPG images &amp; Copy page as image (<code>Ctrl+Shift+C</code>):</strong> quickly paste a page straight into slides or reports.</li>
+          <li><strong>Archival PDF/A:</strong> convert and validate long-term archival copies via Ghostscript + veraPDF.</li>
+        </ul>
+      </section>
+
+      <!-- CAPÍTULO 9 -->
+      <section class="chapter" id="planos">
+        <span class="chapter-num"><span data-lang="es">Capítulo 9</span><span data-lang="en">Chapter 9</span></span>
+        <h2><span data-lang="es">Planos técnicos, medición a escala 1:N y comparación visual</span><span data-lang="en">Technical drawings, 1:N measurement &amp; visual comparison</span></h2>
+        <p data-lang="es">
+          La pestaña <strong>Planos</strong> está diseñada específicamente para arquitectura, ingeniería y peritajes: compara revisiones de planos o contratos y mide cotas reales directamente sobre el PDF.
+        </p>
+        <p data-lang="en">
+          The <strong>Drawings</strong> tab is purpose-built for architecture, engineering, and technical reviews: compare document revisions visually and take real-world measurements straight from the PDF.
+        </p>
+        <figure class="shot">
+          <img src="guide-shots/es/06-compare.webp?v=5" data-src-es="guide-shots/es/06-compare.webp?v=5" data-src-en="guide-shots/en/06-compare.webp?v=5" alt="Comparación visual de planos">
+          <figcaption data-lang="es">Comparador de revisiones con zoom sincronizado, modos Paralelo, Superpuesto y Diferencias en color.</figcaption>
+          <figcaption data-lang="en">Revision Comparison dialog with synced zoom across Side-by-side, Overlay, and Color Difference modes.</figcaption>
+        </figure>
+        <ul data-lang="es">
+          <li><strong>Comparar dos PDF…:</strong> abre el documento original y la revisión; alterna entre vista <em>Paralela</em>, <em>Superpuesta</em> (con opacidad y ajuste fino de desplazamiento X/Y) y <em>Diferencias en color</em> (verde = añadido, rojo = quitado, ámbar = cambio de color).</li>
+          <li><strong>Medir plano:</strong> elige <em>Calibrar con dos puntos…</em> (marca una cota conocida) o <em>Introducir escala 1:N…</em> (ej. <code>1:100</code>), y mide <strong>Distancia</strong>, <strong>Perímetro</strong> o <strong>Superficie</strong> (en m², cm² o mm²).</li>
+          <li><strong>Capas del documento (OCG):</strong> activa o desactiva capas CAD directamente desde el panel izquierdo <strong>Capas</strong>.</li>
+        </ul>
+        <ul data-lang="en">
+          <li><strong>Compare two PDFs…:</strong> open an original and revised file; toggle between <em>Side by side</em>, <em>Overlay</em> (with opacity and X/Y pixel alignment), and <em>Color differences</em> (green = added, red = removed, amber = color changed).</li>
+          <li><strong>Measure drawing:</strong> choose <em>Calibrate with two points…</em> or <em>Enter 1:N scale…</em> (e.g. <code>1:100</code>), then measure <strong>Distance</strong>, <strong>Perimeter</strong>, or <strong>Area</strong>.</li>
+          <li><strong>Document Layers (OCG):</strong> toggle CAD layers on and off directly from the left <strong>Layers</strong> panel.</li>
+        </ul>
+      </section>
+
+      <!-- CAPÍTULO 10 -->
+      <section class="chapter" id="atajos">
+        <span class="chapter-num"><span data-lang="es">Capítulo 10</span><span data-lang="en">Chapter 10</span></span>
+        <h2><span data-lang="es">Privacidad, censura irreversible, Paleta Ctrl+K y atajos</span><span data-lang="en">Privacy, irreversible redaction, Ctrl+K Palette &amp; shortcuts</span></h2>
+        <div class="callout warn">
+          <strong data-lang="es">Censura irreversible (Proteger → Censurar datos)</strong>
+          <strong data-lang="en">Irreversible redaction (Protect → Redact data)</strong>
+          <span data-lang="es">Al contrario que dibujar un rectángulo negro encima (que deja el texto legible por debajo), la censura de PDFiu rasteriza la página afectada, destruye el texto subyacente y elimina metadatos ocultos en una copia nueva para proteger tu original.</span>
+          <span data-lang="en">Unlike drawing a black box on top (which leaves underlying text selectable), PDFiu's redaction flattens affected pages, permanently destroys underlying text, and strips metadata into a clean new copy.</span>
+        </div>
+        <ul data-lang="es">
+          <li><strong>Desbloquear PDF / Poner contraseña…:</strong> quita restricciones de copia/impresión o cifra el documento con contraseña localmente.</li>
+          <li><strong>Preparar copia para compartir…:</strong> limpia metadatos y guarda una copia lista para enviar (y la copia automáticamente al portapapeles como archivo).</li>
+        </ul>
+        <ul data-lang="en">
+          <li><strong>Unlock PDF / Set password…:</strong> remove copy/print restrictions or encrypt sensitive PDFs locally.</li>
+          <li><strong>Prepare copy to share…:</strong> strips metadata, saves a clean copy, and places the file straight on your clipboard.</li>
+        </ul>
+
+        <h3><span data-lang="es">Paleta de comandos (Ctrl+K)</span><span data-lang="en">Command Palette (Ctrl+K)</span></h3>
+        <figure class="shot">
+          <img src="guide-shots/es/07-command-palette.webp?v=5" data-src-es="guide-shots/es/07-command-palette.webp?v=5" data-src-en="guide-shots/en/07-command-palette.webp?v=5" alt="Paleta de comandos Ctrl+K">
+          <figcaption data-lang="es">Paleta flotante Ctrl+K: escribe cualquier acción (sin importar tildes) y pulsa Enter para ejecutarla al vuelo.</figcaption>
+          <figcaption data-lang="en">Floating Ctrl+K palette: type any tool or action name and press Enter to run it immediately.</figcaption>
+        </figure>
+
+        <h3><span data-lang="es">Referencia rápida de atajos de teclado</span><span data-lang="en">Keyboard shortcuts quick reference</span></h3>
+        <table class="ref-table" data-lang="es">
+          <thead><tr><th>Atajo</th><th>Acción</th></tr></thead>
+          <tbody>
+            <tr><td><kbd>Ctrl+K</kbd></td><td>Abrir la Paleta de comandos rápida</td></tr>
+            <tr><td><kbd>Ctrl+O</kbd> / <kbd>Ctrl+N</kbd></td><td>Abrir PDF / Abrir nueva ventana</td></tr>
+            <tr><td><kbd>Ctrl+S</kbd> / <kbd>Ctrl+Shift+S</kbd></td><td>Guardar / Guardar copia como…</td></tr>
+            <tr><td><kbd>Ctrl+Z</kbd> / <kbd>Ctrl+Y</kbd></td><td>Deshacer / Rehacer última edición</td></tr>
+            <tr><td><kbd>Ctrl+F</kbd> / <kbd>F3</kbd> / <kbd>Shift+F3</kbd></td><td>Buscar en el PDF / Siguiente / Anterior coincidencia</td></tr>
+            <tr><td><kbd>Ctrl+2</kbd></td><td>Alternar vista a Doble página</td></tr>
+            <tr><td><kbd>Ctrl++</kbd> / <kbd>Ctrl+-</kbd> / <kbd>Ctrl+rueda</kbd></td><td>Acercar / Alejar zoom del visor</td></tr>
+            <tr><td><kbd>F9</kbd> / <kbd>F11</kbd></td><td>Modo Enfoque (oculta paneles) / Pantalla completa</td></tr>
+            <tr><td><kbd>Espacio + arrastrar</kbd></td><td>Desplazar la página con la mano</td></tr>
+            <tr><td><kbd>Ctrl+Shift+C</kbd></td><td>Copiar la página actual como imagen al portapapeles</td></tr>
+            <tr><td><kbd>Ctrl+,</kbd></td><td>Preferencias (idioma ES/EN y tema claro/oscuro)</td></tr>
+            <tr><td><kbd>Esc</kbd></td><td>Salir de la herramienta activa, búsqueda o pantalla completa</td></tr>
+          </tbody>
+        </table>
+        <table class="ref-table" data-lang="en">
+          <thead><tr><th>Shortcut</th><th>Action</th></tr></thead>
+          <tbody>
+            <tr><td><kbd>Ctrl+K</kbd></td><td>Open Quick Command Palette</td></tr>
+            <tr><td><kbd>Ctrl+O</kbd> / <kbd>Ctrl+N</kbd></td><td>Open PDF / Open new window</td></tr>
+            <tr><td><kbd>Ctrl+S</kbd> / <kbd>Ctrl+Shift+S</kbd></td><td>Save / Save copy as…</td></tr>
+            <tr><td><kbd>Ctrl+Z</kbd> / <kbd>Ctrl+Y</kbd></td><td>Undo / Redo last edit</td></tr>
+            <tr><td><kbd>Ctrl+F</kbd> / <kbd>F3</kbd> / <kbd>Shift+F3</kbd></td><td>Find in PDF / Next / Previous match</td></tr>
+            <tr><td><kbd>Ctrl+2</kbd></td><td>Toggle Two-page view</td></tr>
+            <tr><td><kbd>Ctrl++</kbd> / <kbd>Ctrl+-</kbd> / <kbd>Ctrl+wheel</kbd></td><td>Zoom in / Zoom out</td></tr>
+            <tr><td><kbd>F9</kbd> / <kbd>F11</kbd></td><td>Focus mode (hide panels) / Full screen</td></tr>
+            <tr><td><kbd>Space + drag</kbd></td><td>Pan page with hand tool</td></tr>
+            <tr><td><kbd>Ctrl+Shift+C</kbd></td><td>Copy current page as image to clipboard</td></tr>
+            <tr><td><kbd>Ctrl+,</kbd></td><td>Preferences (ES/EN language &amp; light/dark theme)</td></tr>
+            <tr><td><kbd>Esc</kbd></td><td>Exit active tool, find bar, or full screen</td></tr>
+          </tbody>
+        </table>
+      </section>
+    </article>
+  </div>
+
+  <footer>
+    <span>© 2026 mfcb89 · PDFiu</span>
+    <span>
+      <a href="index.html"><span data-lang="es">Inicio</span><span data-lang="en">Home</span></a> ·
+      <a href="https://apps.microsoft.com/detail/9NK06R3SRRW3">Microsoft Store</a> ·
+      <a href="https://github.com/mfcb89/pdfiu">GitHub</a> ·
+      <a href="https://github.com/mfcb89/pdfiu/blob/main/PRIVACY.md"><span data-lang="es">Privacidad</span><span data-lang="en">Privacy</span></a>
+    </span>
+  </footer>
+
+  <script>
+    const btn = document.getElementById('toggleLang');
+    const localizedImgs = Array.from(document.querySelectorAll('img[data-src-es][data-src-en]'));
+
+    function applyLang(lang) {
+      const isEn = lang === 'en';
+      document.body.classList.toggle('en', isEn);
+      document.documentElement.lang = isEn ? 'en' : 'es';
+      btn.textContent = isEn ? 'ES' : 'EN';
+      localizedImgs.forEach((img) => { img.src = isEn ? img.dataset.srcEn : img.dataset.srcEs; });
+      try { localStorage.setItem('pdfiu-lang', lang); } catch (_) {}
+    }
+
+    btn.addEventListener('click', () => {
+      applyLang(document.body.classList.contains('en') ? 'es' : 'en');
+    });
+
+    try {
+      const saved = localStorage.getItem('pdfiu-lang');
+      if (saved === 'en' || saved === 'es') applyLang(saved);
+    } catch (_) {}
+
+    // Highlight active chapter in sticky TOC on scroll
+    const tocLinks = Array.from(document.querySelectorAll('.toc-list a'));
+    const chapters = Array.from(document.querySelectorAll('section.chapter'));
+    if ('IntersectionObserver' in window && chapters.length) {
+      const io = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            const id = entry.target.id;
+            tocLinks.forEach((link) => link.classList.toggle('active', link.getAttribute('href') === '#' + id));
+          }
+        });
+      }, { rootMargin: '-18% 0px -68% 0px' });
+      chapters.forEach((sec) => io.observe(sec));
+    }
+  </script>
+</body>
+</html>
