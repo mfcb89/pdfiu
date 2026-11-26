@@ -132,6 +132,39 @@ class UiSmokeTests(unittest.TestCase):
         finally:
             dialog.close()
 
+    def test_stamp_rect_embeds_visual_signature_end_to_end(self):
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from PIL import Image, ImageDraw
+        from PySide6.QtCore import QRectF
+        from PySide6.QtWidgets import QApplication
+        import pdfiu
+        from pdf_ops import blank_pdf
+
+        app = QApplication.instance() or QApplication([])
+        window = pdfiu.PDFiu(show_startup=False)
+        try:
+            with TemporaryDirectory() as tmp:
+                pdf_path = Path(tmp) / "doc.pdf"
+                blank_pdf(pdf_path, 595, 842)
+                sig_path = Path(tmp) / "sig.png"
+                img = Image.new("RGB", (200, 80), "white")
+                ImageDraw.Draw(img).line((10, 40, 190, 40), fill=(20, 40, 120), width=6)
+                img.save(sig_path)
+
+                window.open_path(pdf_path)
+                before_size = window.path.stat().st_size
+                window.pending_stamp = (str(sig_path), True)
+                window.select_mode("signature-stamp")
+                window.handle_rectangle(QRectF(40, 40, 180, 70))
+                self.assertTrue(window.dirty)
+                self.assertGreater(window.path.stat().st_size, before_size)
+                self.assertIsNone(window.view.mode)
+        finally:
+            window.dirty = False
+            window.close()
+
 
 if __name__ == "__main__":
     unittest.main()

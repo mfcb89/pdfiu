@@ -4924,11 +4924,13 @@ class PDFiu(QMainWindow):
         order, rotations = dialog.result_plan()
         if order == list(range(self.count)) and not rotations:
             return
-        self.apply_edit(
-            tr("Organizar páginas"),
-            lambda source, destination: edit_pages(source, destination, order, rotations=rotations),
-            page=0,
-        )
+        try:
+            destination = self.scratch_path()
+            edit_pages(self.path, destination, order, rotations=rotations)
+            self.load(destination, name=self.name, dirty=True, page=0)
+            self.note(tr("Páginas organizadas. Pulsa Ctrl+Z para deshacer."))
+        except Exception as error:
+            self.error(error)
 
     def split_current_pdf(self):
         if self.path is None or self.job is not None:
@@ -5142,16 +5144,21 @@ class PDFiu(QMainWindow):
         if not self.pending_stamp or rect.width() < 4 or rect.height() < 4:
             self.note(tr("Dibuja un recuadro más amplio para la firma visual."))
             return
+        if not self.editable():
+            return
         stamp_path, remove_white = self.pending_stamp
         box = self.coordinates.box(rect.left(), rect.top(), rect.right(), rect.bottom())
         page = self.current
         self.clear_mode()
-        self.mutate(
-            tr("Estampar firma visual"),
-            lambda source, destination: add_signature_stamp(
-                source, destination, page, box, stamp_path, remove_white=remove_white,
-            ),
-        )
+        try:
+            destination = self.scratch_path()
+            add_signature_stamp(
+                self.path, destination, page, box, stamp_path, remove_white=remove_white,
+            )
+            self.load(destination, name=self.name, dirty=True, page=page)
+            self.note(tr("Firma visual colocada. Pulsa Ctrl+Z para deshacer o Guardar para conservar los cambios."))
+        except Exception as error:
+            self.error(error)
 
     def start_redaction(self):
         if not self.path or self.job is not None:
