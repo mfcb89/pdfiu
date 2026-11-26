@@ -1498,8 +1498,11 @@ class VisualSignatureDialog(QDialog):
             self.place_btn.setEnabled(False)
             return
         try:
-            image = load_stamp_image(self.stamp_path, remove_white=self.remove_white.isChecked())
-            pixmap = QPixmap.fromImage(as_qimage(image))
+            from PySide6.QtGui import QImage
+            image = load_stamp_image(self.stamp_path, remove_white=self.remove_white.isChecked()).convert("RGBA")
+            raw = image.tobytes("raw", "RGBA")
+            qimg = QImage(raw, image.width, image.height, image.width * 4, QImage.Format.Format_RGBA8888).copy()
+            pixmap = QPixmap.fromImage(qimg)
             scaled = pixmap.scaled(380, 124, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
             self.preview.setText("")
             self.preview.setPixmap(scaled)

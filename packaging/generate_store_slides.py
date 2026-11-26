@@ -84,14 +84,13 @@ def _make_sample_pdfs(folder):
             c.drawString(48, y, line)
             y -= 28
         if idx == 3:
-            c.setStrokeColorRGB(0.19, 0.50, 0.45)
-            c.setLineWidth(2)
-            c.rect(70, 340, 440, 260, stroke=1, fill=0)
-            c.line(290, 340, 290, 600)
-            c.line(70, 470, 290, 470)
-            c.setFont("Helvetica-Bold", 11)
-            c.drawString(120, 530, "OFICINA 42,5 m2")
-            c.drawString(340, 470, "SALA TECNICA 36,0 m2")
+            bp = ROOT / "build" / "sample-assets" / "blueprint.jpg"
+            if bp.is_file():
+                c.drawImage(str(bp), 42, 160, width=510, height=382, preserveAspectRatio=True, anchor="c")
+            else:
+                c.setStrokeColorRGB(0.19, 0.50, 0.45)
+                c.setLineWidth(2)
+                c.rect(70, 340, 440, 260, stroke=1, fill=0)
         c.setFillColorRGB(0.45, 0.52, 0.58)
         c.setFont("Helvetica", 9)
         c.drawRightString(547, 34, f"PDFiu · {idx} / 4")
@@ -105,27 +104,35 @@ def _make_sample_pdfs(folder):
     c2.setFillColorRGB(1, 1, 1)
     c2.setFont("Helvetica-Bold", 20)
     c2.drawString(48, 804, "Plano de Planta · Escala 1:100 (Rev. 2)")
-    c2.setStrokeColorRGB(0.19, 0.50, 0.45)
-    c2.setLineWidth(2)
-    c2.rect(70, 340, 440, 260, stroke=1, fill=0)
-    c2.line(330, 340, 330, 600)
-    c2.line(70, 450, 330, 450)
-    c2.setStrokeColorRGB(0.80, 0.20, 0.20)
-    c2.rect(360, 380, 110, 90, stroke=1, fill=0)
-    c2.setFont("Helvetica-Bold", 11)
+    c2.setFillColorRGB(0.59, 0.84, 0.76)
+    c2.setFont("Helvetica", 11)
+    c2.drawString(48, 780, "Revisión 2 · Ampliación de sala de reuniones y nueva tabiquería")
+    bp = ROOT / "build" / "sample-assets" / "blueprint.jpg"
+    if bp.is_file():
+        c2.drawImage(str(bp), 42, 160, width=510, height=382, preserveAspectRatio=True, anchor="c")
+    # Clear architectural revision changes overlaid on top of blueprint
+    c2.setStrokeColorRGB(0.12, 0.18, 0.24)
+    c2.setLineWidth(3.5)
+    c2.rect(195, 290, 170, 115, stroke=1, fill=0)
+    c2.line(280, 215, 280, 290)
     c2.setFillColorRGB(0.12, 0.18, 0.24)
-    c2.drawString(120, 520, "OFICINA AMPLIADA 49,2 m2")
-    c2.drawString(368, 420, "NUEVA SALA")
+    c2.setFont("Helvetica-Bold", 11)
+    c2.drawString(212, 345, "NUEVA SALA B · 24,5 m2")
+    c2.drawString(48, 710, "Cambio 01 · Nueva partición en zona central y acceso ampliado.")
+    c2.drawString(48, 682, "Cambio 02 · Reubicación de puestos de trabajo en ala oeste.")
     c2.showPage()
     c2.save()
 
-    sig_img = folder / "firma_ejemplo.png"
-    img = Image.new("RGB", (420, 150), "white")
-    d = ImageDraw.Draw(img)
-    pts = [(35, 108), (75, 36), (95, 112), (145, 58), (175, 102), (225, 48), (255, 96), (320, 78), (385, 86)]
-    d.line(pts, fill=(18, 42, 98), width=6, joint="curve")
-    d.line([(45, 122), (370, 112)], fill=(18, 42, 98), width=3)
-    img.save(sig_img)
+    custom_sig = ROOT / "build" / "sample-assets" / "signature.jpg"
+    if custom_sig.is_file():
+        sig_img = custom_sig
+    else:
+        sig_img = folder / "firma_ejemplo.png"
+        img = Image.new("RGB", (420, 150), "white")
+        d = ImageDraw.Draw(img)
+        pts = [(35, 108), (75, 36), (95, 112), (145, 58), (175, 102), (225, 48), (255, 96), (320, 78), (385, 86)]
+        d.line(pts, fill=(18, 42, 98), width=6, joint="curve")
+        img.save(sig_img)
 
     return main_pdf, rev_pdf, sig_img
 
@@ -292,8 +299,10 @@ def _capture_for_lang(app, lang, main_pdf, rev_pdf, sig_img, out_dir, docs_dir=N
     rev = RevisionComparison(win, [(main_pdf, None), (rev_pdf, None)])
     rev.showNormal()
     rev.resize(1180, 720)
+    rev.show()
     rev.page_inputs[0][0].setValue(3)
-    rev.request_render()
+    rev.render_pair()
+    app.processEvents()
     app.processEvents()
     shot_compare = _grab_pil(rev, app)
     rev.close()
@@ -357,9 +366,12 @@ def _capture_for_lang(app, lang, main_pdf, rev_pdf, sig_img, out_dir, docs_dir=N
         ),
     ]
 
+    webp_dir = ROOT / "docs" / "slides" / lang
+    webp_dir.mkdir(parents=True, exist_ok=True)
     for filename, shot, headline, subtitle, pills, dark_bg in slides:
         slide = _compose_slide(shot, headline, subtitle, pills, dark_bg=dark_bg)
         slide.save(out_dir / filename, optimize=True)
+        slide.save(webp_dir / (Path(filename).stem + ".webp"), "WEBP", quality=86, method=4)
 
 
 def main():
