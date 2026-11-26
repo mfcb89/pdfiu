@@ -716,7 +716,7 @@ QLineEdit, QTextEdit, QPlainTextEdit, QComboBox {
     background: #fff; border: 1px solid #d5e0db; padding: 6px 8px; border-radius: 7px; color: #182a3d;
 }
 QSpinBox, QDoubleSpinBox {
-    background: #fff; border: 1px solid #d5e0db; padding: 3px 8px; min-height: 28px; border-radius: 7px; color: #182a3d;
+    background: #fff; border: 1px solid #d5e0db; padding: 4px 8px; border-radius: 7px; color: #182a3d;
 }
 QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {
     border: 1px solid #317f72;
@@ -958,7 +958,7 @@ QLineEdit, QTextEdit, QPlainTextEdit, QComboBox {
     background: #141920; border: 1px solid #303a47; padding: 6px 8px; border-radius: 7px; color: #e6edf3;
 }
 QSpinBox, QDoubleSpinBox {
-    background: #141920; border: 1px solid #303a47; padding: 3px 8px; min-height: 28px; border-radius: 7px; color: #e6edf3;
+    background: #141920; border: 1px solid #303a47; padding: 4px 8px; border-radius: 7px; color: #e6edf3;
 }
 QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {
     border: 1px solid #4fb39d;
