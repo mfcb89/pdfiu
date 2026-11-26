@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from pdf_ops import load_stamp_image, pdfium_reader, project_signature_box, reader_for, render_page, signature_boxes, signature_plan
+from pdfiu_ui import icon
 from pdfiu_views import PageView, as_qimage, button
 from translations import tr
 
@@ -1273,7 +1274,9 @@ class CompressDialog(QDialog):
             self.preset_cards[key] = card
             layout.addWidget(card)
 
-        self.advanced_toggle = QPushButton("+ " + tr("Opciones avanzadas"))
+        self.advanced_toggle = QPushButton(tr("Opciones avanzadas"))
+        self.advanced_toggle.setIcon(icon("chevron-right", 16))
+        self.advanced_toggle.setIconSize(QSize(16, 16))
         self.advanced_toggle.setProperty("role", "flat")
         self.advanced_toggle.setCheckable(True)
         layout.addWidget(self.advanced_toggle)
@@ -1343,7 +1346,7 @@ class CompressDialog(QDialog):
             card.style().polish(card)
 
     def toggle_advanced(self, checked):
-        self.advanced_toggle.setText(("− " if checked else "+ ") + tr("Opciones avanzadas"))
+        self.advanced_toggle.setIcon(icon("chevron-down" if checked else "chevron-right", 16))
         self.advanced_box.setVisible(checked)
         self.adjustSize()
 

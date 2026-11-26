@@ -94,6 +94,8 @@ def signature_details_html(details):
         status, color = tr("Vigencia sin determinar"), "#516472"
     elif details["valid_now"]:
         status, color = tr("Vigente hoy"), "#256755"
+    elif details.get("valid_at_reported_time") is True:
+        status, color = tr("Vigente en la fecha de firma (certificado hoy caducado)"), "#885917"
     else:
         status, color = tr("Certificado fuera de vigencia"), "#885917"
 
@@ -730,7 +732,11 @@ QCheckBox::indicator:checked { background: #317f72; border-color: #317f72; }
 QCheckBox::indicator:disabled { background: #eef2f0; border-color: #d2dcd8; }
 QRadioButton::indicator { width: 16px; height: 16px; border: 1.5px solid #9db0a8; border-radius: 9px; background: #fff; }
 QRadioButton::indicator:hover { border-color: #317f72; }
-QRadioButton::indicator:checked { background: #317f72; border: 4px solid #fff; outline: 1.5px solid #317f72; }
+QRadioButton::indicator:checked {
+    border: 1.5px solid #317f72;
+    border-radius: 9px;
+    background: qradialgradient(cx:0.5, cy:0.5, radius:0.46, fx:0.5, fy:0.5, stop:0 #317f72, stop:0.62 #317f72, stop:0.68 #ffffff, stop:1 #ffffff);
+}
 QFrame#dialogCard { background: #fff; border: 1px solid #d8e3de; border-radius: 10px; }
 QFrame#dialogCard[selected="true"] { background: #edf7f3; border: 1.5px solid #317f72; }
 QFrame#dialogCard:hover { border-color: #9ec5ba; }
@@ -972,7 +978,11 @@ QCheckBox::indicator:checked { background: #2f7d6d; border-color: #4fb39d; }
 QCheckBox::indicator:disabled { background: #1b2028; border-color: #2b3440; }
 QRadioButton::indicator { width: 16px; height: 16px; border: 1.5px solid #4d5c70; border-radius: 9px; background: #141920; }
 QRadioButton::indicator:hover { border-color: #4fb39d; }
-QRadioButton::indicator:checked { background: #4fb39d; border: 4px solid #141920; outline: 1.5px solid #4fb39d; }
+QRadioButton::indicator:checked {
+    border: 1.5px solid #4fb39d;
+    border-radius: 9px;
+    background: qradialgradient(cx:0.5, cy:0.5, radius:0.46, fx:0.5, fy:0.5, stop:0 #4fb39d, stop:0.62 #4fb39d, stop:0.68 #141920, stop:1 #141920);
+}
 QFrame#dialogCard { background: #1c222b; border: 1px solid #2e3846; border-radius: 10px; }
 QFrame#dialogCard[selected="true"] { background: #19312d; border: 1.5px solid #4fb39d; }
 QFrame#dialogCard:hover { border-color: #46586e; }
