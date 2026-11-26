@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QSlider, QSpinBox, QStackedWidget, QVBoxLayout, QWidget,
 )
 
-from pdf_ops import pdfium_reader, project_signature_box, reader_for, render_page, signature_boxes, signature_plan
+from pdf_ops import load_stamp_image, pdfium_reader, project_signature_box, reader_for, render_page, signature_boxes, signature_plan
 from pdfiu_views import PageView, as_qimage, button
 from translations import tr
 
@@ -1422,3 +1422,89 @@ class CompressDialog(QDialog):
             if key == settings["preset"]:
                 return tr(title)
         return tr("Personalizado")
+
+
+class VisualSignatureDialog(QDialog):
+    def __init__(self, parent, initial_path="", remove_white=True):
+        super().__init__(parent)
+        self.setWindowTitle(tr("Firma visual (imagen o PDF)"))
+        self.setMinimumWidth(500)
+        self.stamp_path = initial_path if initial_path and Path(initial_path).is_file() else ""
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(22, 20, 22, 18)
+        layout.setSpacing(12)
+
+        intro = QLabel(
+            tr("Elige una imagen (PNG, JPG, WebP) o un PDF con tu firma o sello. Después dibuja un recuadro en la página para colocarla."),
+            objectName="muted",
+        )
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+
+        file_row = QHBoxLayout()
+        file_row.setSpacing(8)
+        self.path_field = QLineEdit(self.stamp_path)
+        self.path_field.setReadOnly(True)
+        self.path_field.setPlaceholderText(tr("Ningún archivo seleccionado…"))
+        choose_btn = QPushButton(tr("Elegir archivo…"))
+        choose_btn.clicked.connect(self.choose_file)
+        file_row.addWidget(self.path_field, 1)
+        file_row.addWidget(choose_btn)
+        layout.addLayout(file_row)
+
+        preview_card = QFrame(objectName="dialogCard")
+        preview_layout = QVBoxLayout(preview_card)
+        preview_layout.setContentsMargins(14, 14, 14, 14)
+        self.preview = QLabel(tr("Vista previa de la firma"))
+        self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.preview.setMinimumHeight(140)
+        self.preview.setStyleSheet("background: #ffffff; color: #516472; border-radius: 6px; padding: 8px;")
+        preview_layout.addWidget(self.preview)
+        layout.addWidget(preview_card)
+
+        self.remove_white = QCheckBox(tr("Quitar fondo blanco automáticamente"))
+        self.remove_white.setChecked(bool(remove_white))
+        self.remove_white.toggled.connect(self.refresh_preview)
+        layout.addWidget(self.remove_white)
+
+        choices = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
+        self.place_btn = choices.addButton(tr("Colocar en el PDF"), QDialogButtonBox.ButtonRole.AcceptRole)
+        self.place_btn.setObjectName("primary")
+        self.place_btn.setDefault(True)
+        choices.button(QDialogButtonBox.StandardButton.Cancel).setText(tr("Cancelar"))
+        choices.accepted.connect(self.accept)
+        choices.rejected.connect(self.reject)
+        layout.addWidget(choices)
+
+        self.refresh_preview()
+
+    def choose_file(self):
+        chosen, _ = QFileDialog.getOpenFileName(
+            self,
+            tr("Elegir firma o sello"),
+            str(Path(self.stamp_path).parent) if self.stamp_path else "",
+            tr("Imágenes y PDF (*.png *.jpg *.jpeg *.webp *.bmp *.pdf)"),
+        )
+        if chosen:
+            self.stamp_path = chosen
+            self.path_field.setText(chosen)
+            self.refresh_preview()
+
+    def refresh_preview(self):
+        if not self.stamp_path or not Path(self.stamp_path).is_file():
+            self.preview.setPixmap(QPixmap())
+            self.preview.setText(tr("Elige un archivo PNG, JPG o PDF para ver la vista previa."))
+            self.place_btn.setEnabled(False)
+            return
+        try:
+            image = load_stamp_image(self.stamp_path, remove_white=self.remove_white.isChecked())
+            pixmap = QPixmap.fromImage(as_qimage(image))
+            scaled = pixmap.scaled(380, 124, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            self.preview.setText("")
+            self.preview.setPixmap(scaled)
+            self.place_btn.setEnabled(True)
+        except Exception as error:
+            self.preview.setPixmap(QPixmap())
+            self.preview.setText(tr("No se pudo cargar la firma: {0}").format(error))
+            self.place_btn.setEnabled(False)

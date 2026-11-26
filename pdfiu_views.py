@@ -658,7 +658,7 @@ class PageView(QGraphicsView):
             else:
                 self.rubber.setRect(rect)
             return
-        if self.mode in ("signature", "redact") and self.start is not None:
+        if self.mode in ("signature", "signature-stamp", "redact") and self.start is not None:
             rect = QRectF(self.start, self.page_point(event)).normalized()
             if self.rubber is None:
                 pen = QPen(QColor("#146c5d"), 2, Qt.PenStyle.DashLine)
@@ -706,7 +706,7 @@ class PageView(QGraphicsView):
         if self.mode and self.start is not None and event.button() == Qt.MouseButton.LeftButton:
             point = self.page_point(event)
             rect = QRectF(self.start, point).normalized()
-            if self.mode in ("signature", "redact"):
+            if self.mode in ("signature", "signature-stamp", "redact"):
                 self.start = None
                 self.selected.emit(rect)
             elif self.mode.startswith("shape-"):

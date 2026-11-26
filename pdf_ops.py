@@ -1493,6 +1493,69 @@ def protect_copy(source, destination, password):
             raise ValueError(tr("No se pudo comprobar la copia protegida."))
 
 
+def load_stamp_image(stamp_path, *, remove_white=True):
+    from PIL import Image
+
+    stamp_path = Path(stamp_path)
+    if not stamp_path.is_file():
+        raise ValueError(tr("No se encontró el archivo de firma."))
+    if stamp_path.suffix.casefold() == ".pdf":
+        with pdfium_reader(stamp_path) as document:
+            if len(document) < 1:
+                raise ValueError(tr("El PDF de firma no contiene páginas."))
+            image = render_page(document, 0, dpi=300)
+        image = image.convert("RGBA")
+    else:
+        with Image.open(stamp_path) as opened:
+            image = opened.convert("RGBA")
+    if remove_white:
+        cleaned = []
+        pixels = image.get_flattened_data() if hasattr(image, "get_flattened_data") else image.getdata()
+        for r, g, b, a in pixels:
+            if a == 0:
+                cleaned.append((r, g, b, 0))
+                continue
+            lum = (r * 299 + g * 587 + b * 114) // 1000
+            if lum >= 242:
+                cleaned.append((r, g, b, 0))
+            elif lum >= 215:
+                cleaned.append((r, g, b, int(a * (242 - lum) / 27)))
+            else:
+                cleaned.append((r, g, b, a))
+        image.putdata(cleaned)
+    bbox = image.getbbox()
+    if bbox:
+        image = image.crop(bbox)
+    if image.width < 1 or image.height < 1:
+        raise ValueError(tr("La imagen de firma está vacía."))
+    return image
+
+
+def add_signature_stamp(source, destination, page_index, box, stamp_path, *, remove_white=True):
+    reader = reader_for(source)
+    check_editable(reader)
+    writer = PdfWriter(clone_from=reader)
+    page = writer.pages[page_index]
+    left, bottom, right, top = box
+    box_w, box_h = max(1.0, right - left), max(1.0, top - bottom)
+    image = load_stamp_image(stamp_path, remove_white=remove_white)
+    scale = min(box_w / image.width, box_h / image.height)
+    draw_w, draw_h = image.width * scale, image.height * scale
+    draw_x = left + (box_w - draw_w) / 2
+    draw_y = bottom + (box_h - draw_h) / 2
+
+    page_w = float(page.mediabox.width)
+    page_h = float(page.mediabox.height)
+    overlay = BytesIO()
+    canvas = Canvas(overlay, pagesize=(page_w, page_h), pageCompression=1)
+    canvas.drawImage(ImageReader(image), draw_x, draw_y, width=draw_w, height=draw_h, mask="auto")
+    canvas.save()
+    overlay.seek(0)
+    stamp_page = PdfReader(overlay).pages[0]
+    page.merge_page(stamp_page)
+    save_writer(writer, destination)
+
+
 def redact_copy(source, destination, page_boxes, progress):
     from PIL import ImageDraw
 

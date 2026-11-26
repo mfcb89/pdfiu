@@ -30,7 +30,7 @@ from PySide6.QtWidgets import (
 )
 
 from pdf_ops import (
-    Coordinates, OperationCancelled, ProtectedPdf, add_batch_note, add_header_footer, add_review_annotation, add_shape, add_surface_annotation, add_text, atomic_output, blank_pdf,
+    Coordinates, OperationCancelled, ProtectedPdf, add_batch_note, add_header_footer, add_review_annotation, add_shape, add_signature_stamp, add_surface_annotation, add_text, atomic_output, blank_pdf,
     change_annotation_box, clear_form, compress_copy, convert_hybrid_form, document_text, edit_pages, estimate_compression, fill_form, flatten_form, form_fields,
     has_signed_fields, has_xfa, images_to_pdf, insert_pages,
     merge, ocr_document, page_range, page_text, pages_per_sheet, pdf_has_signatures, pdfium_reader, project_signature_box, protect_copy, reader_for,
@@ -57,7 +57,7 @@ from pdfiu_views import (
 )
 from pdfiu_dialogs import (
     BatchDialog, CertificateDialog, CommandPaletteDialog, CompressDialog, CompressionPreview, MergeDialog,
-    OrganizePagesDialog, RevisionComparison, SplitDialog,
+    OrganizePagesDialog, RevisionComparison, SplitDialog, VisualSignatureDialog,
 )
 
 
@@ -235,6 +235,8 @@ class PDFiu(QMainWindow):
         self.sign_btn = button("Firmar con certificado",
                                lambda: self.sign_workspace() if self.batch_selection_count() else self.select_mode("signature"),
                                glyph="sign")
+        self.visual_sign_btn = button("Firma visual (imagen/PDF)…", self.start_visual_signature, glyph="edit-pen-2")
+        self.pending_stamp = None
         self.batch_btn = button("Firmar lote…", self.batch_dialog, glyph="batch-sign")
         self.text_btn = button("Añadir texto", lambda: self.select_mode("text"), glyph="textbox")
         self.text_btn.setCheckable(True)
@@ -312,7 +314,7 @@ class PDFiu(QMainWindow):
                         button("Subrayar selección", lambda: self.highlight_selection(underline=True), glyph="underline"),
                         note_tool, shapes, self.shape_controls(),
                         button("Panel de anotaciones", self.open_comments, glyph="chat-2-text"))),
-            (tr("Firmar"), "document-award", (self.sign_btn, self.batch_btn, self.signature_explorer_btn)),
+            (tr("Firmar"), "document-award", (self.sign_btn, self.visual_sign_btn, self.batch_btn, self.signature_explorer_btn)),
             (tr("Planos"), "view-columns", (measurements, button("Superficies", self.open_surfaces, glyph="view-columns"), plan_menu)),
             (tr("Proteger"), "key", (
                 self.unlock_btn,
@@ -772,6 +774,10 @@ class PDFiu(QMainWindow):
         self.scale_label.setToolTip(tr("Escala de medición de esta página, válida durante esta sesión"))
         self.scale_label.hide()
         row.addWidget(self.scale_label)
+        self.footer_page_pill = QLabel("", objectName="footerPage")
+        self.footer_page_pill.setToolTip(tr("Página actual del documento"))
+        self.footer_page_pill.hide()
+        row.addWidget(self.footer_page_pill)
         self.progress = QProgressBar()
         self.progress.setFixedWidth(125)
         self.progress.setTextVisible(False)
@@ -2634,6 +2640,11 @@ class PDFiu(QMainWindow):
         available = self.path is not None and self.job is None
         self.previous_page_btn.setEnabled(available and self.current > 0)
         self.next_page_btn.setEnabled(available and self.current + 1 < self.count)
+        if self.path is not None and self.count:
+            self.footer_page_pill.setText(tr("Página {0} de {1}").format(self.current + 1, self.count))
+            self.footer_page_pill.show()
+        else:
+            self.footer_page_pill.hide()
 
     def apply_page_number(self):
         text = self.page_number.text().strip()
@@ -3232,6 +3243,8 @@ class PDFiu(QMainWindow):
         self.form_btn.setChecked(mode == "form")
         if mode == "signature":
             self.note(tr("Dibuja el recuadro de firma en la página. Esc para cancelar."))
+        elif mode == "signature-stamp":
+            self.note(tr("Dibuja el recuadro donde colocar la firma visual. Esc para cancelar."))
         elif mode == "edit-text":
             self.note(tr("Haz clic en el texto que quieres cambiar. Enter aplica el cambio y Esc lo cancela."))
         elif mode.startswith("shape-"):
@@ -4767,8 +4780,39 @@ class PDFiu(QMainWindow):
                 box = self.coordinates.box(rect.left(), rect.top(), rect.right(), rect.bottom())
                 self.redaction_boxes.setdefault(self.current, []).append(box)
             self.refresh_redaction_marks()
+        elif self.view.mode == "signature-stamp":
+            self.stamp_rect(rect)
         else:
             self.sign_rect(rect)
+
+    def start_visual_signature(self):
+        if not self.path or self.job is not None or not self.editable():
+            return
+        last_path = str(self.preferences.value("firma/ultima_imagen", "") or "")
+        remove_white = self.preferences.value("firma/quitar_fondo", True, type=bool)
+        dialog = VisualSignatureDialog(self, initial_path=last_path, remove_white=remove_white)
+        if dialog.exec() != QDialog.DialogCode.Accepted or not dialog.stamp_path:
+            return
+        self.preferences.setValue("firma/ultima_imagen", dialog.stamp_path)
+        self.preferences.setValue("firma/quitar_fondo", dialog.remove_white.isChecked())
+        self.preferences.sync()
+        self.pending_stamp = (dialog.stamp_path, dialog.remove_white.isChecked())
+        self.select_mode("signature-stamp")
+
+    def stamp_rect(self, rect):
+        if not self.pending_stamp or rect.width() < 4 or rect.height() < 4:
+            self.note(tr("Dibuja un recuadro más amplio para la firma visual."))
+            return
+        stamp_path, remove_white = self.pending_stamp
+        box = self.coordinates.box(rect.left(), rect.top(), rect.right(), rect.bottom())
+        page = self.current
+        self.clear_mode()
+        self.mutate(
+            tr("Estampar firma visual"),
+            lambda source, destination: add_signature_stamp(
+                source, destination, page, box, stamp_path, remove_white=remove_white,
+            ),
+        )
 
     def start_redaction(self):
         if not self.path or self.job is not None:

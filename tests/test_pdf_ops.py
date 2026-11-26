@@ -235,6 +235,35 @@ class PdfOpsTests(unittest.TestCase):
             image_cs = [ref.get_object().get("/ColorSpace") for ref in gray_xobjs.values() if ref.get_object().get("/Subtype") == "/Image"]
             self.assertIn("/DeviceGray", image_cs)
 
+    def test_add_signature_stamp_png_and_pdf(self):
+        from PIL import Image, ImageDraw
+        from pypdf import PdfReader
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            base = root / "contract.pdf"
+            _make_text_pdf(base, ["Contrato original con texto seleccionable"])
+            stamp_jpg = root / "firma.jpg"
+            stamp_pdf = root / "firma.pdf"
+            out_jpg = root / "signed_jpg.pdf"
+            out_pdf = root / "signed_pdf.pdf"
+
+            img = Image.new("RGB", (240, 100), "white")
+            draw = ImageDraw.Draw(img)
+            draw.line([(20, 70), (120, 20), (210, 65)], fill=(15, 35, 95), width=6)
+            img.save(stamp_jpg, format="JPEG")
+            _make_text_pdf(stamp_pdf, ["Firma S.L."])
+
+            self.pdf_ops.add_signature_stamp(base, out_jpg, 0, (100, 100, 260, 170), stamp_jpg, remove_white=True)
+            self.pdf_ops.add_signature_stamp(base, out_pdf, 0, (100, 100, 260, 170), stamp_pdf, remove_white=True)
+
+            for out in (out_jpg, out_pdf):
+                reader = PdfReader(str(out))
+                self.assertEqual(len(reader.pages), 1)
+                self.assertIn("Contrato original", reader.pages[0].extract_text() or "")
+                xobjs = reader.pages[0]["/Resources"].get("/XObject", {})
+                self.assertGreater(len(xobjs), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

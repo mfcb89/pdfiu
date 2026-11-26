@@ -672,6 +672,7 @@ QTextBrowser#signatureDetails { background: #fff; border: 1px solid #dce6e1; bor
 QLabel#panelLabel { color: #516472; font-size: 12px; font-weight: 600; }
 QLabel#toolHeading, QLabel#resultHeading { color: #182a3d; font-size: 16px; font-weight: 650; }
 QLabel#toolScope { color: #19483f; background: #eaf5ef; padding: 7px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; }
+QLabel#footerPage { color: #182a3d; background: #e8f2ee; padding: 3px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; }
 QLabel#emptyHeading { font-size: 29px; font-weight: 600; color: #182a3d; }
 QLabel#emptyIcon { background: #e9f5ef; border-radius: 15px; }
 QPushButton { padding: 7px 11px; min-height: 17px; border: 1px solid #dce6e1; border-radius: 7px; background: #fff; }
@@ -732,7 +733,6 @@ QFrame#dialogCard[selected="true"] { background: #edf7f3; border: 1.5px solid #3
 QFrame#dialogCard:hover { border-color: #9ec5ba; }
 QGroupBox { border: 1px solid #dce6e1; border-radius: 9px; margin-top: 12px; padding: 12px 10px 10px; font-weight: 600; }
 QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 5px; color: #182a3d; }
-QDialogButtonBox QPushButton, QMessageBox QPushButton { padding: 7px 18px; }
 QMessageBox QLabel#qt_msgbox_label { font-size: 14px; font-weight: 600; color: #182a3d; }
 QSlider::groove:horizontal { height: 4px; background: #d6e2dc; border-radius: 2px; }
 QSlider::handle:horizontal { width: 14px; height: 14px; margin: -5px 0; border-radius: 7px; background: #317f72; }
@@ -854,6 +854,7 @@ QTextBrowser#signatureDetails { background: #161b22; border: 1px solid #2b3440; 
 QLabel#panelLabel { color: #9fb0c4; font-size: 12px; font-weight: 600; }
 QLabel#toolHeading, QLabel#resultHeading { color: #f0f6fc; font-size: 16px; font-weight: 650; }
 QLabel#toolScope { color: #6ee7b7; background: #17302a; padding: 7px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; }
+QLabel#footerPage { color: #8ff0d4; background: #1a332d; padding: 3px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; }
 QLabel#emptyHeading { font-size: 29px; font-weight: 600; color: #f0f6fc; }
 QLabel#emptyIcon { background: #1e3531; border: 1px solid #2c4c46; border-radius: 15px; }
 QPushButton { padding: 7px 11px; min-height: 17px; border: 1px solid #303a47; border-radius: 7px; background: #222a35; color: #e6edf3; }
@@ -971,7 +972,6 @@ QFrame#dialogCard[selected="true"] { background: #19312d; border: 1.5px solid #4
 QFrame#dialogCard:hover { border-color: #46586e; }
 QGroupBox { border: 1px solid #2b3440; border-radius: 9px; margin-top: 12px; padding: 12px 10px 10px; font-weight: 600; color: #e6edf3; }
 QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 5px; color: #e6edf3; }
-QDialogButtonBox QPushButton, QMessageBox QPushButton { padding: 7px 18px; }
 QMessageBox QLabel#qt_msgbox_label { font-size: 14px; font-weight: 600; color: #f0f6fc; }
 QSlider::groove:horizontal { height: 4px; background: #2b3440; border-radius: 2px; }
 QSlider::handle:horizontal { width: 14px; height: 14px; margin: -5px 0; border-radius: 7px; background: #4fb39d; }

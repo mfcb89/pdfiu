@@ -15,22 +15,33 @@ Lector y editor de PDF de código abierto creado por **mfcb89**, pensado como al
 
 ## Por qué PDFiu
 
-- **100% local y privado:** tus PDF se procesan únicamente en tu equipo. PDFiu no requiere cuenta ni realiza conexiones de red salvo que consultes actualizaciones manualmente o actives la comprobación opcional al iniciar.
-- **Todo en una sola app ligera:** incluye funciones que suelen exigir licencias o suscripciones externas (unir y organizar páginas, editar texto, rellenar formularios, OCR en español e inglés, firma digital, censura, medición/comparación de planos y exportación a Word, Excel y Markdown).
-- **Código abierto sostenible:** el código fuente es público bajo licencia MIT y puedes compilarlo gratis en tu equipo. El instalador oficial de pago para Windows financia el desarrollo, la firma de código y las actualizaciones.
+- **100 % local, sin nube y sin cuenta:** tus PDF se procesan únicamente en tu equipo. Desbloqueo, censura irreversible, firma digital, OCR y compresión funcionan sin subir archivos a ninguna web y sin límites diarios de tareas.
+- **Pago único tras 15 días de prueba completa:** sin suscripciones mensuales, sin popups de *upgrade* y sin funciones esenciales bloqueadas.
+- **Todo en una app ligera (~92 MB):** estima antes de comprimir si vas a ahorrar peso y compáralo al 100 %, firma con certificado (individual o en lote) o con firma visual (`PNG`/`JPG`/`PDF`), compara dos PDF visualmente (documentos, imágenes o planos), aplica OCR sin conexión y exporta a Word, Excel y Markdown.
+- **Código abierto sostenible:** el código fuente es público bajo licencia MIT y puedes compilarlo gratis en tu equipo. La versión oficial en Microsoft Store financia el desarrollo y las actualizaciones.
+
+## Capturas de funciones
+
+| Compresión inteligente (3 niveles + avanzadas) | Panel de Firmas en modo oscuro |
+| :---: | :---: |
+| ![Compresión inteligente con 3 niveles y opciones avanzadas](docs/screenshots/compress.png) | ![Panel de firmas con tarjetas de integridad en tema oscuro](docs/screenshots/signatures-dark.png) |
+
+| Firma visual (PNG, JPG o PDF con fondo transparente) | Organizar páginas arrastrando en cuadrícula |
+| :---: | :---: |
+| ![Firma visual desde imagen o PDF con eliminación automática de fondo blanco](docs/screenshots/visual-sign.png) | ![Cuadrícula visual para reordenar, girar y borrar páginas](docs/screenshots/organize.png) |
 
 ## Qué puedes hacer
 
 | Área | Funciones |
 | --- | --- |
-| **Lectura y navegación** | Pestañas desmontables en varias ventanas, vista continua o **doble página (`Ctrl+2`)**, tema claro y oscuro, pantalla completa, miniaturas, filtro de marcadores, búsqueda rápida (`Ctrl+F`) con tildes/operadores y paleta de comandos (`Ctrl+K`). |
+| **Lectura y navegación** | Pestañas desmontables en varias ventanas, indicador siempre visible **Página X de Y**, vista continua o **doble página (`Ctrl+2`)**, tema claro y oscuro, panel lateral redimensionable, filtro de marcadores, búsqueda rápida (`Ctrl+F`) y paleta de comandos (`Ctrl+K`). |
 | **Organizar, unir y dividir** | **Cuadrícula visual de páginas** para reordenar arrastrando, girar o eliminar; unir varios PDF con índice automático, **dividir PDF** por rangos o cada N hojas, extraer páginas, varias páginas por hoja y mesa de trabajo en lote. |
-| **Comprimir PDF** | **3 niveles rápidos** (*Baja*, *Recomendada* y *Extrema*) más **Opciones avanzadas**: compresión de imágenes `RGB`, `ICCBased`, `CMYK`, `JPEG2000` y transparencias (`SMask`), paso a escala de grises, limpieza de datos privados/miniaturas/metadatos, **estimación previa** y **comparación visual al 100 %** antes de guardar. |
+| **Comprimir PDF** | **3 niveles rápidos** (*Baja*, *Recomendada* y *Extrema*) más **Opciones avanzadas**: **estima antes si realmente vas a ahorrar peso**, comprime imágenes `RGB`, `ICCBased`, `CMYK`, `JPEG2000` y transparencias (`SMask`), paso a escala de grises, limpieza de datos privados/miniaturas/metadatos y **comparación visual al 100 %** antes de guardar. |
 | **Editar y anotar** | Editar texto compatible, añadir texto nuevo, rellenar y fijar formularios **AcroForm**, encabezados, pies y numeración de páginas; resaltados, subrayados, notas, formas y panel de anotaciones con filtros. |
-| **Firmar con certificado** | Firma digital **PAdES (RSA y ECDSA)** con certificados del almacén de Windows o archivos `.pfx`/`.p12`, recuadro visible, **firma en lote** y explorador de firmas con verificación de integridad. |
-| **Proteger y privacidad** | **Desbloquear PDF**, cifrar copias con contraseña **AES-256**, **censura irreversible** (borra el contenido real con OCR opcional) y **preparar copia para compartir** sin metadatos. |
-| **OCR y exportación** | **OCR local** en español e inglés (Tesseract) en una página o en todo el documento. Exportar a **Word (`.docx`)**, **Excel (`.xlsx`)**, **CSV**, **Markdown (`.md`)** con vista previa, **TXT**, **PNG**, **PDF/A** y **copiar página como imagen** (`Ctrl+Shift+C`). |
-| **Planos e impresión** | Comparar revisiones en paralelo, superpuestas o resaltando diferencias; calibrar escalas `1:N` y medir longitudes, perímetros y superficies. Impresión con vista previa, tamaño real, mosaico para planos y folleto. |
+| **Firmar (certificado y visual)** | Firma digital **PAdES (RSA y ECDSA)** individual o **múltiple en lote** con certificados de Windows (FNMT/DNIe) o `.pfx`/`.p12`, **firma visual desde `PNG`, `JPG`, `WebP` o `PDF`** con eliminación automática de fondo blanco, y explorador de firmas en tarjetas con verificación de integridad. |
+| **Proteger y privacidad** | **Desbloquear PDF sin suscripciones ni nube**, cifrar copias con contraseña **AES-256**, **censura irreversible real** (borra el contenido subyacente, con OCR opcional) y **preparar copia para compartir** sin metadatos. |
+| **OCR y exportación** | **OCR local sin conexión ni límites** en español e inglés (Tesseract). Exportar a **Word (`.docx`)**, **Excel (`.xlsx`)**, **CSV**, **Markdown (`.md`)** con vista previa, **TXT**, **PNG**, **PDF/A** y **copiar página como imagen** (`Ctrl+Shift+C`). |
+| **Comparar PDF, planos e impresión** | **Compara dos PDF visualmente** (documentos, imágenes o planos) en paralelo, superpuestos o resaltando diferencias en color; calibra escalas `1:N` y mide distancias, perímetros y superficies. Impresión con vista previa, tamaño real, mosaico y folleto. |
 
 [Manual de usuario](LEEME.md) · [Guía de compilación](packaging/LEEME.md) · [Política de privacidad](PRIVACY.md) · [Historial de cambios](CHANGELOG.md)
 

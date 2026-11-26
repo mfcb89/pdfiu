@@ -119,6 +119,19 @@ class UiSmokeTests(unittest.TestCase):
             finally:
                 dialog.close()
 
+    def test_visual_signature_dialog_initializes(self):
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtWidgets import QApplication
+        from pdfiu_dialogs import VisualSignatureDialog
+
+        app = QApplication.instance() or QApplication([])
+        dialog = VisualSignatureDialog(None)
+        try:
+            self.assertFalse(dialog.place_btn.isEnabled())
+            self.assertTrue(dialog.remove_white.isChecked())
+        finally:
+            dialog.close()
+
 
 if __name__ == "__main__":
     unittest.main()
