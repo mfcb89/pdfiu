@@ -1273,7 +1273,7 @@ class CompressDialog(QDialog):
             self.preset_cards[key] = card
             layout.addWidget(card)
 
-        self.advanced_toggle = QPushButton("▸ " + tr("Opciones avanzadas"))
+        self.advanced_toggle = QPushButton("+ " + tr("Opciones avanzadas"))
         self.advanced_toggle.setProperty("role", "flat")
         self.advanced_toggle.setCheckable(True)
         layout.addWidget(self.advanced_toggle)
@@ -1338,7 +1338,7 @@ class CompressDialog(QDialog):
             card.style().polish(card)
 
     def toggle_advanced(self, checked):
-        self.advanced_toggle.setText(("▾ " if checked else "▸ ") + tr("Opciones avanzadas"))
+        self.advanced_toggle.setText(("− " if checked else "+ ") + tr("Opciones avanzadas"))
         self.advanced_box.setVisible(checked)
         self.adjustSize()
 

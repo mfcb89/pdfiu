@@ -712,8 +712,11 @@ QListWidget::item:hover:!selected { background: #eff5f1; }
 QGraphicsView { border: 0; background: #e8edea; }
 QWidget#emptyState { background: #f2f5f2; }
 QFrame#emptyCard { background: #fff; border: 1px solid #dce6e1; border-radius: 18px; }
-QLineEdit, QTextEdit, QPlainTextEdit, QComboBox, QSpinBox, QDoubleSpinBox {
+QLineEdit, QTextEdit, QPlainTextEdit, QComboBox {
     background: #fff; border: 1px solid #d5e0db; padding: 6px 8px; border-radius: 7px; color: #182a3d;
+}
+QSpinBox, QDoubleSpinBox {
+    background: #fff; border: 1px solid #d5e0db; padding: 3px 8px; min-height: 28px; border-radius: 7px; color: #182a3d;
 }
 QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {
     border: 1px solid #317f72;
@@ -951,8 +954,11 @@ QScrollBar:vertical { background: transparent; width: 10px; margin: 2px; }
 QScrollBar::handle:vertical { background: #3b4656; min-height: 24px; border-radius: 3px; }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
 QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
-QLineEdit, QTextEdit, QPlainTextEdit, QComboBox, QSpinBox, QDoubleSpinBox {
+QLineEdit, QTextEdit, QPlainTextEdit, QComboBox {
     background: #141920; border: 1px solid #303a47; padding: 6px 8px; border-radius: 7px; color: #e6edf3;
+}
+QSpinBox, QDoubleSpinBox {
+    background: #141920; border: 1px solid #303a47; padding: 3px 8px; min-height: 28px; border-radius: 7px; color: #e6edf3;
 }
 QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {
     border: 1px solid #4fb39d;
