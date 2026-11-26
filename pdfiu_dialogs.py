@@ -1444,7 +1444,8 @@ class VisualSignatureDialog(QDialog):
 
         file_row = QHBoxLayout()
         file_row.setSpacing(8)
-        self.path_field = QLineEdit(self.stamp_path)
+        self.path_field = QLineEdit(Path(self.stamp_path).name if self.stamp_path else "")
+        self.path_field.setToolTip(self.stamp_path)
         self.path_field.setReadOnly(True)
         self.path_field.setPlaceholderText(tr("Ningún archivo seleccionado…"))
         choose_btn = QPushButton(tr("Elegir archivo…"))
@@ -1488,7 +1489,8 @@ class VisualSignatureDialog(QDialog):
         )
         if chosen:
             self.stamp_path = chosen
-            self.path_field.setText(chosen)
+            self.path_field.setText(Path(chosen).name)
+            self.path_field.setToolTip(chosen)
             self.refresh_preview()
 
     def refresh_preview(self):
