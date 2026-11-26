@@ -4,10 +4,13 @@ from functools import lru_cache
 from html import escape
 from pathlib import Path
 
-from PySide6.QtCore import QByteArray, QEvent, QPoint, QPointF, QRect, QRectF, QSize, Qt, QTimer, Signal
+from PySide6.QtCore import Property, QByteArray, QEasingCurve, QEvent, QPoint, QPointF, QPropertyAnimation, QRect, QRectF, QSize, Qt, QTimer, QVariantAnimation, Signal
 from PySide6.QtGui import QColor, QFont, QGuiApplication, QIcon, QPainter, QPainterPath, QPalette, QPen, QPixmap, QTextCharFormat, QTextLayout, QTextOption
 from PySide6.QtSvg import QSvgRenderer
-from PySide6.QtWidgets import QComboBox, QFrame, QHBoxLayout, QLabel, QPushButton, QSplashScreen, QStyle, QStyledItemDelegate, QStyleOptionViewItem, QTextEdit, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QComboBox, QFrame, QGraphicsOpacityEffect, QHBoxLayout, QLabel, QPushButton, QSplashScreen, QStackedWidget,
+    QStyle, QStyledItemDelegate, QStyleOptionViewItem, QTextEdit, QVBoxLayout, QWidget,
+)
 
 from pdf_ops import HeaderRun
 
@@ -365,10 +368,64 @@ def icon(name, size=16, color=None, *, filled_when_checked=False):
 
 
 class PanelRail(QFrame):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._active_rect = QRectF()
+        self._active_button = None
+        self._anim = QPropertyAnimation(self, b"activeRect", self)
+        self._anim.setDuration(190)
+        self._anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+
+    def _get_active_rect(self):
+        return self._active_rect
+
+    def _set_active_rect(self, rect):
+        self._active_rect = QRectF(rect)
+        self.update()
+
+    activeRect = Property(QRectF, _get_active_rect, _set_active_rect)
+
+    def move_indicator(self, target_button, *, animate=True):
+        self._active_button = target_button
+        if target_button is None or not target_button.isVisible():
+            self._anim.stop()
+            self._active_rect = QRectF()
+            self.update()
+            return
+        top_left = target_button.mapTo(self, QPoint(0, 0))
+        target = QRectF(top_left.x(), top_left.y(), target_button.width(), target_button.height())
+        if target.width() <= 0 or target.height() <= 0:
+            return
+        if not animate or self._active_rect.isEmpty() or not self.isVisible():
+            self._anim.stop()
+            self._active_rect = target
+            self.update()
+            return
+        self._anim.stop()
+        self._anim.setStartValue(self._active_rect)
+        self._anim.setEndValue(target)
+        self._anim.start()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if self._active_button is not None:
+            QTimer.singleShot(0, lambda: self.move_indicator(self._active_button, animate=False))
+
     def paintEvent(self, event):
         super().paintEvent(event)
         with QPainter(self) as painter:
-            border = QColor("#2b3440") if _active_theme == "dark" else QColor("#dde5e1")
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            is_dark = _active_theme == "dark"
+            if not self._active_rect.isEmpty():
+                fill = QColor("#1d3c35") if is_dark else QColor("#dff0e7")
+                accent = QColor("#4fb39d") if is_dark else QColor("#2a7a6b")
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(fill)
+                painter.drawRoundedRect(self._active_rect.adjusted(1, 1, -1, -1), 7.0, 7.0)
+                bar = QRectF(2.0, self._active_rect.y() + 6.0, 3.0, max(10.0, self._active_rect.height() - 12.0))
+                painter.setBrush(accent)
+                painter.drawRoundedRect(bar, 1.5, 1.5)
+            border = QColor("#2b3440") if is_dark else QColor("#dde5e1")
             painter.fillRect(self.width() - 1, 0, 1, self.height(), border)
 
 
@@ -619,6 +676,175 @@ class HeaderEditor(QWidget):
         return tuple(lines)
 
 
+class MotionButton(QPushButton):
+    """QPushButton with smooth hover/press transition overlay."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._hover_progress = 0.0
+        self._press_progress = 0.0
+        self._hover_anim = QVariantAnimation(self)
+        self._hover_anim.setDuration(140)
+        self._hover_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._hover_anim.valueChanged.connect(self._set_hover_progress)
+        self._press_anim = QVariantAnimation(self)
+        self._press_anim.setDuration(90)
+        self._press_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._press_anim.valueChanged.connect(self._set_press_progress)
+
+    def _set_hover_progress(self, value):
+        self._hover_progress = float(value)
+        self.update()
+
+    def _set_press_progress(self, value):
+        self._press_progress = float(value)
+        self.update()
+
+    def enterEvent(self, event):
+        super().enterEvent(event)
+        if self.isEnabled():
+            self._hover_anim.stop()
+            self._hover_anim.setStartValue(self._hover_progress)
+            self._hover_anim.setEndValue(1.0)
+            self._hover_anim.start()
+
+    def leaveEvent(self, event):
+        super().leaveEvent(event)
+        self._hover_anim.stop()
+        self._hover_anim.setStartValue(self._hover_progress)
+        self._hover_anim.setEndValue(0.0)
+        self._hover_anim.start()
+
+    def mousePressEvent(self, event):
+        super().mousePressEvent(event)
+        if self.isEnabled():
+            self._press_anim.stop()
+            self._press_anim.setStartValue(self._press_progress)
+            self._press_anim.setEndValue(1.0)
+            self._press_anim.start()
+
+    def mouseReleaseEvent(self, event):
+        super().mouseReleaseEvent(event)
+        self._press_anim.stop()
+        self._press_anim.setStartValue(self._press_progress)
+        self._press_anim.setEndValue(0.0)
+        self._press_anim.start()
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if not self.isEnabled() or (self._hover_progress <= 0.005 and self._press_progress <= 0.005):
+            return
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setPen(Qt.PenStyle.NoPen)
+        is_dark = _active_theme == "dark"
+        is_primary = self.objectName() == "primary"
+        radius = 8.0 if self.property("role") in ("hudButton", "hudToggle") else 7.0
+        if self._hover_progress > 0.005:
+            if is_primary:
+                tint = QColor(255, 255, 255, int(24 * self._hover_progress))
+            elif is_dark:
+                tint = QColor(110, 231, 183, int(22 * self._hover_progress))
+            else:
+                tint = QColor(49, 127, 114, int(18 * self._hover_progress))
+            painter.setBrush(tint)
+            painter.drawRoundedRect(self.rect().adjusted(1, 1, -1, -1), radius, radius)
+        if self._press_progress > 0.005:
+            press_tint = QColor(0, 0, 0, int(22 * self._press_progress)) if not is_dark else QColor(255, 255, 255, int(18 * self._press_progress))
+            painter.setBrush(press_tint)
+            painter.drawRoundedRect(self.rect().adjusted(1, 1, -1, -1), radius, radius)
+        painter.end()
+
+
+class SlidingCategoryPanel(QFrame):
+    """Category selector frame that animates a gliding pill behind the active button."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._pill_rect = QRectF()
+        self._active_button = None
+        self._anim = QPropertyAnimation(self, b"pillRect", self)
+        self._anim.setDuration(200)
+        self._anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+
+    def _get_pill_rect(self):
+        return self._pill_rect
+
+    def _set_pill_rect(self, rect):
+        self._pill_rect = QRectF(rect)
+        self.update()
+
+    pillRect = Property(QRectF, _get_pill_rect, _set_pill_rect)
+
+    def move_to(self, target_button, *, animate=True):
+        if target_button is None:
+            return
+        self._active_button = target_button
+        target = QRectF(target_button.geometry())
+        if target.width() <= 0 or target.height() <= 0:
+            return
+        if not animate or self._pill_rect.isEmpty() or not self.isVisible():
+            self._anim.stop()
+            self._pill_rect = target
+            self.update()
+            return
+        self._anim.stop()
+        self._anim.setStartValue(self._pill_rect)
+        self._anim.setEndValue(target)
+        self._anim.start()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if self._active_button is not None:
+            QTimer.singleShot(0, lambda: self.move_to(self._active_button, animate=False))
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if self._active_button is not None:
+            QTimer.singleShot(0, lambda: self.move_to(self._active_button, animate=False))
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if self._pill_rect.isEmpty():
+            return
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        is_dark = _active_theme == "dark"
+        fill = QColor("#1d3c35") if is_dark else QColor("#ffffff")
+        border = QColor("#327263") if is_dark else QColor("#b8d9cc")
+        painter.setBrush(fill)
+        painter.setPen(QPen(border, 1.2))
+        painter.drawRoundedRect(self._pill_rect.adjusted(0.6, 0.6, -0.6, -0.6), 7.0, 7.0)
+        painter.end()
+
+
+class AnimatedStackedWidget(QStackedWidget):
+    """QStackedWidget with a subtle fade-in transition on page switches."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._fade_anim = None
+
+    def setCurrentIndex(self, index):
+        if index == self.currentIndex():
+            return
+        super().setCurrentIndex(index)
+        widget = self.currentWidget()
+        if widget is None or not self.isVisible():
+            return
+        effect = QGraphicsOpacityEffect(widget)
+        effect.setOpacity(0.25)
+        widget.setGraphicsEffect(effect)
+        anim = QPropertyAnimation(effect, b"opacity", self)
+        anim.setDuration(140)
+        anim.setStartValue(0.25)
+        anim.setEndValue(1.0)
+        anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        anim.finished.connect(lambda w=widget: w.setGraphicsEffect(None) if w is not None else None)
+        self._fade_anim = anim
+        anim.start()
+
+
 STYLE = """
 QWidget { background: #fff; color: #182a3d; font-family: "Segoe UI", "Helvetica Neue", Arial; font-size: 13px; }
 QMainWindow, QFrame#shellBar, QFrame#footer { background: #fff; }
@@ -809,7 +1035,89 @@ QScrollBar::handle:vertical { background: #afc0b8; min-height: 24px; border-radi
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
 QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
 """
-STYLE += f'QComboBox::down-arrow {{ image: url("{(ICON_PATH / "chevron_down_16_regular.svg").as_posix()}"); width: 14px; height: 14px; }}'
+STYLE += f'''
+QComboBox::down-arrow {{ image: url("{(ICON_PATH / "chevron_down_16_regular.svg").as_posix()}"); width: 14px; height: 14px; }}
+QCheckBox::indicator:checked {{ image: url("{(ICON_PATH / "checkmark_white_16.svg").as_posix()}"); }}
+QSpinBox, QDoubleSpinBox {{ padding: 4px 26px 4px 6px; }}
+QSpinBox QLineEdit, QDoubleSpinBox QLineEdit {{ padding: 0 4px 0 6px; border: 0; background: transparent; }}
+QSpinBox::up-button, QDoubleSpinBox::up-button {{
+    subcontrol-origin: border; subcontrol-position: top right; width: 22px;
+    border: 0; border-left: 1px solid #d5e0db; border-top-right-radius: 7px; background: #f6faf8;
+}}
+QSpinBox::down-button, QDoubleSpinBox::down-button {{
+    subcontrol-origin: border; subcontrol-position: bottom right; width: 22px;
+    border: 0; border-left: 1px solid #d5e0db; border-top: 1px solid #e2ebe7; border-bottom-right-radius: 7px; background: #f6faf8;
+}}
+QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover,
+QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover {{ background: #e6f2ec; }}
+QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {{ image: url("{(ICON_PATH / "spin_up_light.svg").as_posix()}"); width: 10px; height: 10px; }}
+QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {{ image: url("{(ICON_PATH / "spin_down_light.svg").as_posix()}"); width: 10px; height: 10px; }}
+'''
+STYLE += """
+QFrame#toolCategories QPushButton[role="category"]:checked { background: transparent; border-color: transparent; color: #16493e; font-weight: 600; }
+QFrame#toolCategories QPushButton[role="category"]:hover:!checked { background: rgba(49, 127, 114, 16); border-radius: 7px; }
+QPushButton#quickSearchBtn {
+    padding: 4px 9px; min-height: 22px; border: 1px solid #d5e2dc; border-radius: 8px;
+    background: #f5f9f7; color: #516472; font-size: 12px; font-weight: 500;
+}
+QPushButton#quickSearchBtn:hover { background: #e9f4ee; border-color: #b4d2c6; color: #182a3d; }
+QPushButton[role="railSection"]:checked {
+    background: transparent; border-color: transparent;
+}
+QFrame#viewerHud {
+    background: rgba(255, 255, 255, 242); border: 1px solid #d3e0da; border-radius: 14px;
+}
+QFrame#hudDivider { background: #dce6e1; max-width: 1px; min-width: 1px; margin: 5px 2px; }
+QPushButton[role="hudButton"], QPushButton[role="hudToggle"] {
+    padding: 4px 7px; min-height: 24px; border: 1px solid transparent; border-radius: 8px;
+    background: transparent; color: #182a3d; font-size: 12px; font-weight: 500;
+}
+QPushButton[role="hudButton"]:hover, QPushButton[role="hudToggle"]:hover {
+    background: #edf5f1; border-color: #d4e4dc;
+}
+QPushButton[role="hudToggle"]:checked {
+    background: #daf0e7; border-color: #9ecfc0; color: #17493f; font-weight: 600;
+}
+QPushButton[role="hudButton"]:disabled, QPushButton[role="hudToggle"]:disabled {
+    color: #9aa7b4; background: transparent; border-color: transparent;
+}
+QPushButton#hudZoomButton {
+    padding: 3px 9px; min-height: 24px; min-width: 58px; border: 1px solid #dbe6e0; border-radius: 8px;
+    background: #f6faf8; color: #182a3d; font-size: 12px; font-weight: 600;
+}
+QPushButton#hudZoomButton:hover { background: #eaf4ef; border-color: #b6d4c8; }
+QPushButton#hudZoomButton::menu-indicator { image: none; width: 0; height: 0; }
+QLineEdit#readerPageNumber {
+    padding: 2px 4px; color: #182a3d; font-size: 12px; font-weight: 600;
+    background: #f5f9f7; border: 1px solid #d4e0da; border-radius: 7px;
+}
+QLineEdit#readerPageNumber:focus { background: #fff; border-color: #317f72; }
+QLabel#readerPageTotal { color: #5b6d7a; font-size: 12px; font-weight: 500; padding: 0 2px; }
+QMenu { background: #ffffff; color: #182a3d; border: 1px solid #d3e0da; border-radius: 10px; padding: 6px; }
+QMenu::item { padding: 8px 22px 8px 12px; border: 1px solid transparent; border-radius: 6px; margin: 1px 0; }
+QMenu::item:selected { background: #dcf1e8; color: #16493e; border-color: #b9ddd0; }
+QMenu::separator { background: #e4ece8; height: 1px; margin: 5px 8px; }
+QPushButton[role="recentCard"] {
+    text-align: left; padding: 9px 12px; border: 1px solid #e1eae5; border-radius: 10px;
+    background: #fafcfb; color: #182a3d;
+}
+QPushButton[role="recentCard"]:hover { background: #edf6f2; border-color: #b4d5c8; }
+QFrame#paletteCard { background: #ffffff; border: 1px solid #d0ded8; border-radius: 14px; }
+QWidget#paletteHeader { background: transparent; }
+QLineEdit#paletteSearch { background: transparent; border: 0; font-size: 15px; padding: 2px 4px; color: #182a3d; }
+QLineEdit#paletteSearch:focus { border: 0; }
+QLabel#paletteKeycap {
+    background: #f1f6f4; border: 1px solid #d4e1db; border-radius: 5px;
+    padding: 2px 6px; font-size: 10px; font-weight: 700; color: #566b78;
+}
+QFrame#paletteDivider { background: #e3ece8; }
+QListWidget#paletteList { background: transparent; border: 0; padding: 6px 4px; outline: none; }
+QFrame#paletteFooter { background: #f6faf8; border-top: 1px solid #e3ece8; border-bottom-left-radius: 14px; border-bottom-right-radius: 14px; }
+QLabel#linkPill {
+    background: #2563eb; color: #ffffff; border-radius: 11px; padding: 4px 10px;
+    font-size: 12px; font-weight: 600;
+}
+"""
 
 
 DARK_STYLE = """
@@ -994,7 +1302,88 @@ QSlider::handle:horizontal { width: 14px; height: 14px; margin: -5px 0; border-r
 QSlider::handle:horizontal:hover { background: #6ee7b7; }
 QSplitter::handle { background: #262f3b; }
 QSplitter::handle:hover { background: #4fb39d; }
+QFrame#toolCategories QPushButton[role="category"]:checked { background: transparent; border-color: transparent; color: #8ff0d4; font-weight: 600; }
+QFrame#toolCategories QPushButton[role="category"]:hover:!checked { background: rgba(110, 231, 183, 18); border-radius: 7px; }
+QPushButton#quickSearchBtn {
+    padding: 4px 9px; min-height: 22px; border: 1px solid #2e3947; border-radius: 8px;
+    background: #1a212b; color: #9ab0c4; font-size: 12px; font-weight: 500;
+}
+QPushButton#quickSearchBtn:hover { background: #222d3a; border-color: #3f5166; color: #e6edf3; }
+QPushButton[role="railSection"]:checked {
+    background: transparent; border-color: transparent;
+}
+QFrame#viewerHud {
+    background: rgba(24, 31, 40, 240); border: 1px solid #323e4d; border-radius: 14px;
+}
+QFrame#hudDivider { background: #2f3b4a; max-width: 1px; min-width: 1px; margin: 5px 2px; }
+QPushButton[role="hudButton"], QPushButton[role="hudToggle"] {
+    padding: 4px 7px; min-height: 24px; border: 1px solid transparent; border-radius: 8px;
+    background: transparent; color: #e2eaf2; font-size: 12px; font-weight: 500;
+}
+QPushButton[role="hudButton"]:hover, QPushButton[role="hudToggle"]:hover {
+    background: #25303e; border-color: #384659;
+}
+QPushButton[role="hudToggle"]:checked {
+    background: #1d3c35; border-color: #3c8675; color: #8ff0d4; font-weight: 600;
+}
+QPushButton[role="hudButton"]:disabled, QPushButton[role="hudToggle"]:disabled {
+    color: #5b697a; background: transparent; border-color: transparent;
+}
+QPushButton#hudZoomButton {
+    padding: 3px 9px; min-height: 24px; min-width: 58px; border: 1px solid #303c4b; border-radius: 8px;
+    background: #1a222c; color: #e6edf3; font-size: 12px; font-weight: 600;
+}
+QPushButton#hudZoomButton:hover { background: #24303e; border-color: #46586e; }
+QPushButton#hudZoomButton::menu-indicator { image: none; width: 0; height: 0; }
+QLineEdit#readerPageNumber {
+    padding: 2px 4px; color: #f0f6fc; font-size: 12px; font-weight: 600;
+    background: #141920; border: 1px solid #303c4b; border-radius: 7px;
+}
+QLineEdit#readerPageNumber:focus { background: #141920; border-color: #4fb39d; }
+QLabel#readerPageTotal { color: #8b9bb0; font-size: 12px; font-weight: 500; padding: 0 2px; }
+QMenu { background: #1c232d; color: #e6edf3; border: 1px solid #323e4d; border-radius: 10px; padding: 6px; }
+QMenu::item { padding: 8px 22px 8px 12px; border: 1px solid transparent; border-radius: 6px; margin: 1px 0; }
+QMenu::item:selected { background: #1d3c35; color: #8ff0d4; border-color: #327263; }
+QMenu::separator { background: #2c3644; height: 1px; margin: 5px 8px; }
+QPushButton[role="recentCard"] {
+    text-align: left; padding: 9px 12px; border: 1px solid #2b3542; border-radius: 10px;
+    background: #181f28; color: #e6edf3;
+}
+QPushButton[role="recentCard"]:hover { background: #202a36; border-color: #3d6f62; }
+QFrame#paletteCard { background: #1a212b; border: 1px solid #323f50; border-radius: 14px; }
+QWidget#paletteHeader { background: transparent; }
+QLineEdit#paletteSearch { background: transparent; border: 0; font-size: 15px; padding: 2px 4px; color: #f0f6fc; }
+QLineEdit#paletteSearch:focus { border: 0; }
+QLabel#paletteKeycap {
+    background: #141920; border: 1px solid #323f50; border-radius: 5px;
+    padding: 2px 6px; font-size: 10px; font-weight: 700; color: #95a8bd;
+}
+QFrame#paletteDivider { background: #2a3442; }
+QListWidget#paletteList { background: transparent; border: 0; padding: 6px 4px; outline: none; }
+QFrame#paletteFooter { background: #141a22; border-top: 1px solid #2a3442; border-bottom-left-radius: 14px; border-bottom-right-radius: 14px; }
+QLabel#linkPill {
+    background: #2f7d6d; color: #ffffff; border-radius: 11px; padding: 4px 10px;
+    font-size: 12px; font-weight: 600;
+}
 """
+DARK_STYLE += f'''
+QComboBox::down-arrow {{ image: url("{(ICON_PATH / "spin_down_dark.svg").as_posix()}"); width: 12px; height: 12px; }}
+QCheckBox::indicator:checked {{ image: url("{(ICON_PATH / "checkmark_white_16.svg").as_posix()}"); }}
+QSpinBox, QDoubleSpinBox {{ padding: 4px 26px 4px 6px; }}
+QSpinBox QLineEdit, QDoubleSpinBox QLineEdit {{ padding: 0 4px 0 6px; border: 0; background: transparent; }}
+QSpinBox::up-button, QDoubleSpinBox::up-button {{
+    subcontrol-origin: border; subcontrol-position: top right; width: 22px;
+    border: 0; border-left: 1px solid #303a47; border-top-right-radius: 7px; background: #1c232d;
+}}
+QSpinBox::down-button, QDoubleSpinBox::down-button {{
+    subcontrol-origin: border; subcontrol-position: bottom right; width: 22px;
+    border: 0; border-left: 1px solid #303a47; border-top: 1px solid #26303d; border-bottom-right-radius: 7px; background: #1c232d;
+}}
+QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover,
+QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover {{ background: #263241; }}
+QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {{ image: url("{(ICON_PATH / "spin_up_dark.svg").as_posix()}"); width: 10px; height: 10px; }}
+QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {{ image: url("{(ICON_PATH / "spin_down_dark.svg").as_posix()}"); width: 10px; height: 10px; }}
+'''
 
 
 def resolve_theme(preference):

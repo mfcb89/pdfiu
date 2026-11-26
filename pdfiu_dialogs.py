@@ -5,12 +5,12 @@ from html import escape
 from pathlib import Path
 import unicodedata
 
-from PySide6.QtCore import QEvent, QMimeData, QPoint, QSignalBlocker, QSize, Qt, QTimer
-from PySide6.QtGui import QColor, QDrag, QIcon, QPixmap, QTransform
+from PySide6.QtCore import QEasingCurve, QEvent, QMimeData, QPoint, QPropertyAnimation, QRect, QRectF, QSignalBlocker, QSize, Qt, QTimer
+from PySide6.QtGui import QColor, QDrag, QFont, QIcon, QPainter, QPen, QPixmap, QTransform
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QButtonGroup, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox, QFileDialog,
-    QFormLayout, QFrame, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget, QListWidgetItem, QPushButton, QRadioButton,
-    QSlider, QSpinBox, QStackedWidget, QVBoxLayout, QWidget,
+    QFormLayout, QFrame, QGraphicsDropShadowEffect, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget, QListWidgetItem, QPushButton, QRadioButton,
+    QSlider, QSpinBox, QStackedWidget, QStyle, QStyledItemDelegate, QVBoxLayout, QWidget,
 )
 
 from pdf_ops import load_stamp_image, pdfium_reader, project_signature_box, reader_for, render_page, signature_boxes, signature_plan
@@ -800,34 +800,164 @@ def _fold_text(value):
     return "".join(ch for ch in normalized if unicodedata.category(ch) != "Mn")
 
 
+class CommandPaletteDelegate(QStyledItemDelegate):
+    def paint(self, painter, option, index):
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        rect = option.rect.adjusted(6, 2, -6, -2)
+        selected = bool(option.state & QStyle.StateFlag.State_Selected)
+        hovered = bool(option.state & QStyle.StateFlag.State_MouseOver)
+        is_dark = option.palette.base().color().lightness() < 128
+
+        if selected:
+            fill = QColor("#1d3c35") if is_dark else QColor("#dff1ea")
+            border = QColor("#327263") if is_dark else QColor("#b2d7c9")
+            painter.setPen(QPen(border, 1))
+            painter.setBrush(fill)
+            painter.drawRoundedRect(rect, 8, 8)
+        elif hovered:
+            fill = QColor("#222a36") if is_dark else QColor("#f2f7f4")
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(fill)
+            painter.drawRoundedRect(rect, 8, 8)
+
+        label = index.data(Qt.ItemDataRole.UserRole + 1) or index.data(Qt.ItemDataRole.DisplayRole) or ""
+        group = index.data(Qt.ItemDataRole.UserRole + 2) or ""
+        shortcut = index.data(Qt.ItemDataRole.UserRole + 3) or ""
+
+        right_x = rect.right() - 10
+        badge_font = QFont(option.font)
+        badge_font.setPixelSize(11)
+        badge_font.setWeight(QFont.Weight.DemiBold)
+        painter.setFont(badge_font)
+        fm = painter.fontMetrics()
+
+        if shortcut:
+            sw = fm.horizontalAdvance(shortcut) + 14
+            srect = QRectF(right_x - sw, rect.center().y() - 10, sw, 20)
+            painter.setPen(QPen(QColor("#384658") if is_dark else QColor("#d0ddd7"), 1))
+            painter.setBrush(QColor("#151b23") if is_dark else QColor("#ffffff"))
+            painter.drawRoundedRect(srect, 5, 5)
+            painter.setPen(QColor("#b8c8d8") if is_dark else QColor("#435765"))
+            painter.drawText(srect, Qt.AlignmentFlag.AlignCenter, shortcut)
+            right_x = int(srect.left()) - 6
+
+        if group:
+            gw = fm.horizontalAdvance(group) + 14
+            grect = QRectF(right_x - gw, rect.center().y() - 10, gw, 20)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor("#243140") if is_dark else QColor("#ebf3ef"))
+            painter.drawRoundedRect(grect, 6, 6)
+            painter.setPen(QColor("#8fd8c4") if is_dark else QColor("#26675b"))
+            painter.drawText(grect, Qt.AlignmentFlag.AlignCenter, group)
+            right_x = int(grect.left()) - 8
+
+        title_font = QFont(option.font)
+        title_font.setPixelSize(13)
+        title_font.setWeight(QFont.Weight.DemiBold if selected else QFont.Weight.Normal)
+        painter.setFont(title_font)
+        painter.setPen((QColor("#92f2d6") if is_dark else QColor("#15453b")) if selected else (QColor("#e6edf3") if is_dark else QColor("#182a3d")))
+        text_rect = QRect(rect.left() + 12, rect.top(), max(40, right_x - rect.left() - 14), rect.height())
+        elided = painter.fontMetrics().elidedText(label, Qt.TextElideMode.ElideRight, text_rect.width())
+        painter.drawText(text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, elided)
+        painter.restore()
+
+    def sizeHint(self, option, index):
+        return QSize(0, 40)
+
+
 class CommandPaletteDialog(QDialog):
     def __init__(self, entries, parent=None):
         super().__init__(parent)
         self.setWindowTitle(tr("Paleta de comandos"))
-        self.resize(520, 420)
+        self.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.resize(580, 450)
         self.entries = entries
         self.chosen = None
+        self._open_anim = None
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(14, 14, 14, 14)
-        layout.setSpacing(10)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(18, 16, 18, 22)
+        outer.setSpacing(0)
 
-        self.search = QLineEdit()
+        card = QFrame(objectName="paletteCard")
+        shadow = QGraphicsDropShadowEffect(card)
+        shadow.setBlurRadius(34)
+        shadow.setOffset(0, 10)
+        shadow.setColor(QColor(15, 23, 42, 72))
+        card.setGraphicsEffect(shadow)
+        outer.addWidget(card)
+
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        header = QWidget(objectName="paletteHeader")
+        header_row = QHBoxLayout(header)
+        header_row.setContentsMargins(16, 12, 14, 12)
+        header_row.setSpacing(10)
+        search_icon = QLabel()
+        search_icon.setPixmap(icon("search", 18).pixmap(18, 18))
+        header_row.addWidget(search_icon)
+
+        self.search = QLineEdit(objectName="paletteSearch")
         self.search.setPlaceholderText(tr("Buscar comando o herramienta…"))
         self.search.setClearButtonEnabled(True)
         self.search.textChanged.connect(self.refresh)
         self.search.installEventFilter(self)
-        layout.addWidget(self.search)
+        header_row.addWidget(self.search, 1)
 
-        self.results = QListWidget()
+        esc_badge = QLabel("ESC", objectName="paletteKeycap")
+        header_row.addWidget(esc_badge)
+        layout.addWidget(header)
+
+        divider = QFrame(objectName="paletteDivider")
+        divider.setFrameShape(QFrame.Shape.HLine)
+        divider.setFixedHeight(1)
+        layout.addWidget(divider)
+
+        self.results = QListWidget(objectName="paletteList")
         self.results.setAlternatingRowColors(False)
+        self.results.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.results.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        self.results.setMouseTracking(True)
+        self.results.setItemDelegate(CommandPaletteDelegate(self.results))
         self.results.itemActivated.connect(self.accept_selected)
+        self.results.itemClicked.connect(self.accept_selected)
         layout.addWidget(self.results, 1)
 
+        footer = QFrame(objectName="paletteFooter")
+        footer_row = QHBoxLayout(footer)
+        footer_row.setContentsMargins(14, 8, 14, 8)
         hint = QLabel(tr("Pulsa Enter para ejecutar o Esc para cerrar."), objectName="muted")
-        layout.addWidget(hint)
+        hint.setStyleSheet("font-size: 11px;")
+        footer_row.addWidget(hint, 1)
+        self.count_label = QLabel("", objectName="muted")
+        self.count_label.setStyleSheet("font-size: 11px;")
+        footer_row.addWidget(self.count_label)
+        layout.addWidget(footer)
 
         self.refresh()
+        self.search.setFocus()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        parent = self.parentWidget()
+        if parent is not None and parent.isVisible():
+            center = parent.frameGeometry().center()
+            target_x = center.x() - self.width() // 2
+            target_y = parent.frameGeometry().top() + max(56, int(parent.height() * 0.13))
+            start_pos = QPoint(target_x, target_y - 12)
+            end_pos = QPoint(target_x, target_y)
+            self.move(start_pos)
+            anim = QPropertyAnimation(self, b"pos", self)
+            anim.setDuration(150)
+            anim.setStartValue(start_pos)
+            anim.setEndValue(end_pos)
+            anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+            self._open_anim = anim
+            anim.start()
         self.search.setFocus()
 
     def eventFilter(self, watched, event):
@@ -843,6 +973,9 @@ class CommandPaletteDialog(QDialog):
             if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
                 self.accept_selected()
                 return True
+            if key == Qt.Key.Key_Escape:
+                self.reject()
+                return True
         return super().eventFilter(watched, event)
 
     def refresh(self):
@@ -857,9 +990,13 @@ class CommandPaletteDialog(QDialog):
                 display = f"{display}  ({shortcut})"
             item = QListWidgetItem(display)
             item.setData(Qt.ItemDataRole.UserRole, callback)
+            item.setData(Qt.ItemDataRole.UserRole + 1, label)
+            item.setData(Qt.ItemDataRole.UserRole + 2, group)
+            item.setData(Qt.ItemDataRole.UserRole + 3, shortcut)
             self.results.addItem(item)
         if self.results.count():
             self.results.setCurrentRow(0)
+        self.count_label.setText(str(self.results.count()))
 
     def accept_selected(self, item=None):
         target = item or self.results.currentItem()
@@ -1347,8 +1484,33 @@ class CompressDialog(QDialog):
 
     def toggle_advanced(self, checked):
         self.advanced_toggle.setIcon(icon("chevron-down" if checked else "chevron-right", 16))
-        self.advanced_box.setVisible(checked)
-        self.adjustSize()
+        if not self.isVisible():
+            self.advanced_box.setMaximumHeight(16777215 if checked else 0)
+            self.advanced_box.setVisible(checked)
+            self.adjustSize()
+            return
+        if getattr(self, "_adv_anim", None) is not None:
+            self._adv_anim.stop()
+        anim = QPropertyAnimation(self.advanced_box, b"maximumHeight", self)
+        anim.setDuration(180)
+        anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        if checked:
+            self.advanced_box.setMaximumHeight(16777215)
+            target = max(1, self.advanced_box.sizeHint().height())
+            self.advanced_box.setMaximumHeight(0)
+            self.advanced_box.show()
+            anim.setStartValue(0)
+            anim.setEndValue(target)
+            anim.valueChanged.connect(lambda _: self.adjustSize())
+            anim.finished.connect(lambda: (self.advanced_box.setMaximumHeight(16777215), self.adjustSize()))
+        else:
+            start = max(1, self.advanced_box.height())
+            anim.setStartValue(start)
+            anim.setEndValue(0)
+            anim.valueChanged.connect(lambda _: self.adjustSize())
+            anim.finished.connect(lambda: (self.advanced_box.hide(), self.advanced_box.setMaximumHeight(16777215), self.adjustSize()))
+        self._adv_anim = anim
+        anim.start()
 
     def apply_preset_index(self, index):
         key, _, _, values = self.PRESETS[index]

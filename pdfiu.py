@@ -20,11 +20,11 @@ WINDOWS_BUNDLE = sys.platform == "win32" and getattr(sys, "frozen", False)
 if (RUNTIME / "deps").is_dir():
     sys.path.insert(0, str(RUNTIME / "deps"))
 
-from PySide6.QtCore import QEvent, QItemSelectionModel, QLocale, QMimeData, QPoint, QPointF, QRectF, QSettings, QSignalBlocker, QSize, Qt, QThread, QTimer, QUrl, Signal
+from PySide6.QtCore import QEasingCurve, QEvent, QItemSelectionModel, QLocale, QMimeData, QPoint, QPointF, QPropertyAnimation, QRectF, QSettings, QSignalBlocker, QSize, Qt, QThread, QTimer, QUrl, Signal
 from PySide6.QtGui import QAction, QColor, QDesktopServices, QDrag, QIcon, QImage, QKeySequence, QPageSize, QPainterPath, QPen, QPixmap, QTextDocument, QTransform
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QButtonGroup, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QDockWidget, QDoubleSpinBox, QFileDialog, QFormLayout,
-    QFrame, QGraphicsDropShadowEffect, QGraphicsScene, QGraphicsView, QGridLayout, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget,
+    QFrame, QGraphicsDropShadowEffect, QGraphicsOpacityEffect, QGraphicsScene, QGraphicsView, QGridLayout, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget,
     QListWidgetItem, QMainWindow, QMenu, QMessageBox, QPlainTextEdit, QProgressBar, QProgressDialog, QPushButton, QScrollArea, QSizePolicy, QSpinBox,
     QSplitter, QStackedWidget, QStyle, QStyledItemDelegate, QStyleOptionViewItem, QTabBar, QTabWidget, QTextBrowser, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
 )
@@ -38,7 +38,7 @@ from pdf_ops import (
     signature_boxes, signature_plan, signature_value, signature_widgets, split_pdf, surface_records, text_block_at, unlock_pdf,
     validate_signature_box, workspace_batch_copies,
 )
-from pdfiu_ui import ANNOTATION_CARD_ROLE, HeaderEditor, PageNavigator, PanelRail, SEARCH_EXCERPT_ROLE, STYLE, SearchResultDelegate, TourSpotlight, apply_theme, brand_icon, brand_pixmap, icon, signature_details_html, startup_screen, text_line_boxes
+from pdfiu_ui import ANNOTATION_CARD_ROLE, AnimatedStackedWidget, HeaderEditor, PageNavigator, PanelRail, SEARCH_EXCERPT_ROLE, STYLE, SearchResultDelegate, SlidingCategoryPanel, TourSpotlight, apply_theme, brand_icon, brand_pixmap, icon, signature_details_html, startup_screen, text_line_boxes
 from plan_tools import inspect_document, layer_list, layer_preview, measured_value, prepare_recipe
 from release_info import APP_NAME, APP_VERSION, STORE_PROTOCOL_URL, is_store_package, latest_release, update_channel
 from document_export import export_document, markdown_from_pdf
@@ -212,12 +212,23 @@ class PDFiu(QMainWindow):
 
         tools = QFrame(objectName="toolPanel")
         self.tools = tools
-        tools.setFixedWidth(260)
+        tools.setMinimumWidth(0)
+        tools.setMaximumWidth(260)
+        self._tool_panel_width = 260
+        self._tool_panel_anim = None
         tool_layout = QVBoxLayout(tools)
         tool_layout.setContentsMargins(14, 15, 14, 12)
         tool_layout.setSpacing(9)
-        tool_layout.addWidget(QLabel(tr("Herramientas"), objectName="toolHeading"))
-        category_panel = QFrame(objectName="toolCategories")
+        tool_header = QHBoxLayout()
+        tool_header.setContentsMargins(0, 0, 0, 0)
+        tool_header.addWidget(QLabel(tr("Herramientas"), objectName="toolHeading"), 1)
+        self.quick_search_btn = button("Ctrl+K", self.open_command_palette, glyph="search")
+        self.quick_search_btn.setObjectName("quickSearchBtn")
+        self.quick_search_btn.setToolTip(tr("Buscar herramienta rápidamente (Ctrl+K)"))
+        tool_header.addWidget(self.quick_search_btn)
+        tool_layout.addLayout(tool_header)
+        category_panel = SlidingCategoryPanel(objectName="toolCategories")
+        self.category_panel = category_panel
         categories = QGridLayout(category_panel)
         categories.setContentsMargins(5, 5, 5, 5)
         categories.setSpacing(4)
@@ -230,7 +241,7 @@ class PDFiu(QMainWindow):
         self.tool_scope.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         self.tool_scope.hide()
         tool_layout.addWidget(self.tool_scope)
-        self.tool_pages = QStackedWidget()
+        self.tool_pages = AnimatedStackedWidget()
         tool_layout.addWidget(self.tool_pages, 1)
         self.sign_btn = button("Firmar con certificado",
                                lambda: self.sign_workspace() if self.batch_selection_count() else self.select_mode("signature"),
@@ -372,6 +383,7 @@ class PDFiu(QMainWindow):
         favorites.addWidget(favorite_scroll, 1)
         self.tool_pages.addWidget(self.favorite_pane)
         add_category(len(groups), tr("Favoritos"), "star")
+        self.category_panel.move_to(self.tool_group.button(0), animate=False)
         self.refresh_favorites()
 
         self.form_strip = QFrame(objectName="formStrip")
@@ -401,7 +413,7 @@ class PDFiu(QMainWindow):
         column.setContentsMargins(11, 13, 11, 12)
         page_header = QHBoxLayout()
         page_header.addWidget(QLabel(tr("Miniaturas"), objectName="panelLabel"), 1)
-        page_header.addWidget(icon_button(tr("Cerrar panel"), "close", lambda: self.set_navigation(False)))
+        page_header.addWidget(icon_button(tr("Cerrar panel"), "close", lambda: self.set_navigation(False, animate=True)))
         column.addLayout(page_header)
         self.pages = PageList(self)
         self.pages.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
@@ -441,6 +453,10 @@ class PDFiu(QMainWindow):
         self.navigation_column = QWidget(objectName="navigationPanel")
         self.navigation_column.setMinimumWidth(220)
         self.navigation_column.setMaximumWidth(640)
+        self._nav_last_width = 260
+        self._nav_anim = None
+        self._rail_anim = None
+        self._nav_fade_anim = None
         navigation_layout = QVBoxLayout(self.navigation_column)
         navigation_layout.setContentsMargins(0, 0, 0, 0)
         navigation_layout.setSpacing(0)
@@ -487,6 +503,7 @@ class PDFiu(QMainWindow):
         self.view.shape_drawn.connect(self.save_shape)
         self.view.form_clicked.connect(self.edit_form_field)
         self.view.signature_clicked.connect(self.signature_explorer)
+        self.view.link_clicked.connect(self.open_pdf_link)
         self.view.point_selected.connect(self.text_point)
         self.view.text_error.connect(self.note)
         viewer_column = QWidget()
@@ -612,7 +629,7 @@ class PDFiu(QMainWindow):
         files_header = QHBoxLayout()
         files_header.addWidget(QLabel(tr("Mesa de trabajo"), objectName="panelLabel"), 1)
         files_header.addWidget(icon_button(tr("Añadir PDFs"), "plus", self.open_dialog))
-        files_header.addWidget(icon_button(tr("Cerrar panel"), "close", lambda: self.set_navigation(False)))
+        files_header.addWidget(icon_button(tr("Cerrar panel"), "close", lambda: self.set_navigation(False, animate=True)))
         work_layout.addLayout(files_header)
         work_layout.addWidget(self.work_list, 1)
         self.work_hint = QLabel(objectName="muted")
@@ -788,73 +805,96 @@ class PDFiu(QMainWindow):
         row.addWidget(self.cancel_job_btn)
         self.page_number = QLineEdit("1", objectName="readerPageNumber")
         self.page_number.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.page_number.setFixedWidth(34)
-        self.page_number.setFixedHeight(25)
+        self.page_number.setFixedWidth(40)
+        self.page_number.setFixedHeight(26)
         self.page_number.setMaxLength(8)
         self.page_number.setAccessibleName(tr("Ir a la página"))
         self.page_number.setToolTip(tr("Escribe el número de página y pulsa Enter."))
         self.page_number.editingFinished.connect(self.apply_page_number)
         self.page_label = QLabel("", objectName="readerPageTotal")
         self.page_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.page_label.setFixedWidth(42)
-        previous_page = icon_button(tr("Página anterior"), "rail-previous", lambda: self.goto(self.current - 1), size=28, glyph_size=20)
-        next_page = icon_button(tr("Página siguiente"), "rail-next", lambda: self.goto(self.current + 1), size=28, glyph_size=20)
+        previous_page = icon_button(tr("Página anterior"), "chevron-left", lambda: self.goto(self.current - 1), size=28, glyph_size=16)
+        next_page = icon_button(tr("Página siguiente"), "chevron-right", lambda: self.goto(self.current + 1), size=28, glyph_size=16)
         self.previous_page_btn = previous_page
         self.next_page_btn = next_page
-        zoom_out = icon_button(tr("Alejar (Ctrl+-)"), "rail-zoom-out", lambda: self.view.zoom(0.8), size=28, glyph_size=20)
-        zoom_in = icon_button(tr("Acercar (Ctrl+=)"), "rail-zoom-in", lambda: self.view.zoom(1.25), size=28, glyph_size=20)
+        zoom_out = icon_button(tr("Alejar (Ctrl+-)"), "rail-zoom-out", lambda: self.view.zoom(0.8), size=28, glyph_size=16)
+        zoom_in = icon_button(tr("Acercar (Ctrl+=)"), "rail-zoom-in", lambda: self.view.zoom(1.25), size=28, glyph_size=16)
         for control in (previous_page, next_page, zoom_out, zoom_in):
-            control.setProperty("role", "readerButton")
-        size_menu = action_menu("Tamaño", (
+            control.setProperty("role", "hudButton")
+        self.zoom_level = QLineEdit("100 %", objectName="zoomLevel")
+        self.zoom_level.hide()
+        self.zoom_level.editingFinished.connect(self.apply_zoom_level)
+        size_menu = action_menu("100 %", (
+            ("50 %", lambda: self.view.set_percent(50)),
+            ("75 %", lambda: self.view.set_percent(75)),
             (tr("Tamaño real (100 %)"), lambda: self.view.set_percent(100)),
-            (tr("Ajustar página"), self.view.fit_page),
-            (tr("Ajustar ancho"), self.view.fit_width),
+            ("125 %", lambda: self.view.set_percent(125)),
+            ("150 %", lambda: self.view.set_percent(150)),
+            ("200 %", lambda: self.view.set_percent(200)),
         ))
+        size_menu.setObjectName("hudZoomButton")
+        size_menu.setAccessibleName(tr("Porcentaje de zoom"))
+        size_menu.setToolTip(tr("Zoom del visor. Haz clic para elegir un nivel rápido o usa Ctrl + rueda."))
         size_menu.menu().addSeparator()
+        size_menu.menu().addAction(tr("Ajustar ancho"), self.view.fit_width)
+        size_menu.menu().addAction(tr("Ajustar página"), self.view.fit_page)
         self.size_two_page_action = size_menu.menu().addAction(tr("Doble página"))
         self.size_two_page_action.setCheckable(True)
         self.size_two_page_action.toggled.connect(self.toggle_two_page)
-        self.zoom_level = QLineEdit("100 %", objectName="zoomLevel")
-        self.zoom_level.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.zoom_level.setFixedWidth(40)
-        self.zoom_level.setFixedHeight(21)
-        self.zoom_level.setMaxLength(7)
-        self.zoom_level.setToolTip(tr("Zoom del visor. También puedes usar Ctrl + rueda."))
-        self.zoom_level.setAccessibleName(tr("Porcentaje de zoom"))
-        self.zoom_level.editingFinished.connect(self.apply_zoom_level)
+        self.hud_zoom_btn = size_menu
         self.view.zoom_changed.connect(self.update_zoom_level)
-        self.reader_controls = QFrame(objectName="readerControls")
-        self.reader_layout = QVBoxLayout(self.reader_controls)
-        self.reader_layout.setContentsMargins(0, 0, 0, 0)
-        self.reader_layout.setSpacing(3)
-        pages_group = QWidget(objectName="readerGroup")
-        self.reader_page_layout = QVBoxLayout(pages_group)
-        self.reader_page_layout.setContentsMargins(0, 0, 0, 0)
-        self.reader_page_layout.setSpacing(0)
-        for control in (self.page_number, self.page_label):
-            self.reader_page_layout.addWidget(control, 0, Qt.AlignmentFlag.AlignHCenter)
-        self.reader_page_buttons = self.reader_button_pair(previous_page, next_page)
-        self.reader_page_layout.addWidget(self.reader_page_buttons, 0, Qt.AlignmentFlag.AlignHCenter)
-        zoom_group = QWidget(objectName="readerZoomGroup")
-        self.reader_zoom_layout = QVBoxLayout(zoom_group)
-        self.reader_zoom_layout.setContentsMargins(0, 4, 0, 0)
-        self.reader_zoom_layout.setSpacing(1)
-        self.reader_zoom_layout.addWidget(self.zoom_level, 0, Qt.AlignmentFlag.AlignHCenter)
-        self.reader_zoom_buttons = self.reader_button_pair(zoom_in, zoom_out)
-        self.reader_zoom_layout.addWidget(self.reader_zoom_buttons, 0, Qt.AlignmentFlag.AlignHCenter)
+
+        hud_fit_width = button("Ancho", self.view.fit_width)
+        hud_fit_width.setProperty("role", "hudButton")
+        hud_fit_width.setToolTip(tr("Ajustar ancho"))
+        hud_fit_page = button("Página", self.view.fit_page, glyph="rail-fit")
+        hud_fit_page.setProperty("role", "hudButton")
+        hud_fit_page.setToolTip(tr("Ajustar página"))
+        self.hud_two_page_btn = button("Doble", lambda: self.toggle_two_page(self.hud_two_page_btn.isChecked()), glyph="view-columns")
+        self.hud_two_page_btn.setProperty("role", "hudToggle")
+        self.hud_two_page_btn.setCheckable(True)
+        self.hud_two_page_btn.setToolTip(tr("Doble página"))
+        hud_rotate = icon_button(tr("Girar página"), "reload-circle", self.rotate_page, size=28, glyph_size=16)
+        hud_rotate.setProperty("role", "hudButton")
+
+        self.viewer_hud = QFrame(self.canvas, objectName="viewerHud")
+        self.reader_controls = self.viewer_hud
+        self.reader_in_rail = False
+        self._hud_opacity = QGraphicsOpacityEffect(self.viewer_hud)
+        self._hud_opacity.setOpacity(0.42)
+        self.viewer_hud.setGraphicsEffect(self._hud_opacity)
+        self._hud_anim = QPropertyAnimation(self._hud_opacity, b"opacity", self)
+        self._hud_anim.setDuration(170)
+        self._hud_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._hud_idle_timer = QTimer(self, singleShot=True, interval=2200)
+        self._hud_idle_timer.timeout.connect(self._dim_viewer_hud)
+        self._hud_hovered = False
+        self.viewer_hud.installEventFilter(self)
+        self.canvas.installEventFilter(self)
+        self.canvas.currentChanged.connect(lambda _: self.position_viewer_hud())
+        self.view.viewport().setMouseTracking(True)
+        size_menu.menu().aboutToShow.connect(lambda: self._wake_viewer_hud(sticky=True))
+        size_menu.menu().aboutToHide.connect(lambda: self._wake_viewer_hud(sticky=False))
+        hud_layout = QHBoxLayout(self.viewer_hud)
+        hud_layout.setContentsMargins(8, 5, 8, 5)
+        hud_layout.setSpacing(4)
+
+        def hud_sep():
+            sep = QFrame(objectName="hudDivider")
+            sep.setFrameShape(QFrame.Shape.VLine)
+            return sep
+
+        for item in (
+            previous_page, self.page_number, self.page_label, next_page,
+            hud_sep(),
+            zoom_out, size_menu, zoom_in,
+            hud_sep(),
+            hud_fit_width, hud_fit_page, self.hud_two_page_btn, hud_rotate,
+        ):
+            hud_layout.addWidget(item)
+        self.viewer_hud.hide()
+        self.view.viewport().installEventFilter(self)
         self.footer_layout = row
-        self.reader_in_rail = True
-        size_menu.setText("")
-        size_menu.setAccessibleName(tr("Tamaño de página"))
-        size_menu.setToolTip(tr("Tamaño de página"))
-        size_menu.setProperty("role", "readerSize")
-        size_menu.setProperty("iconGlyph", ("rail-fit", 20, False, False))
-        size_menu.setIcon(icon("rail-fit", 20))
-        size_menu.setIconSize(QSize(20, 20))
-        size_menu.setFixedSize(28, 30)
-        for control in (pages_group, size_menu, zoom_group):
-            self.reader_layout.addWidget(control, 0, Qt.AlignmentFlag.AlignHCenter)
-        self.rail_layout.addWidget(self.reader_controls, 0, Qt.AlignmentFlag.AlignHCenter)
         row.addWidget(self.focus_toggle)
         self.fullscreen_toggle = button("Pantalla completa", self.toggle_fullscreen, glyph="maximize")
         row.addWidget(self.fullscreen_toggle)
@@ -862,7 +902,7 @@ class PDFiu(QMainWindow):
         self.document_controls = (
             self.save_btn, self.save_copy_btn, self.close_pdf_btn, self.search_btn, self.rotate_btn, self.remove_btn, self.extract_btn, self.pages,
             self.zoom_level, self.page_number, self.bookmark_tree, self.focus_toggle,
-            previous_page, next_page, zoom_out, zoom_in, size_menu,
+            previous_page, next_page, zoom_out, zoom_in, size_menu, hud_fit_width, hud_fit_page, self.hud_two_page_btn, hud_rotate,
             *(widget for _, _, widgets in groups for widget in widgets),
         )
         self.build_menus()
@@ -1703,10 +1743,17 @@ class PDFiu(QMainWindow):
         self.recent_offer = QFrame(objectName="welcomeOffer")
         recent = QVBoxLayout(self.recent_offer)
         recent.setContentsMargins(0, 14, 0, 0)
-        recent.setSpacing(6)
-        recent.addWidget(QLabel(tr("Documentos recientes"), objectName="panelLabel"))
+        recent.setSpacing(8)
+        recent_header = QHBoxLayout()
+        recent_header.setContentsMargins(0, 0, 0, 0)
+        recent_header.addWidget(QLabel(tr("Documentos recientes"), objectName="panelLabel"), 1)
+        clear_recent = button("Limpiar", lambda: self.set_recent_files([]))
+        clear_recent.setProperty("role", "flat")
+        clear_recent.setToolTip(tr("Borrar historial de recientes"))
+        recent_header.addWidget(clear_recent)
+        recent.addLayout(recent_header)
         self.recent_rows = QVBoxLayout()
-        self.recent_rows.setSpacing(4)
+        self.recent_rows.setSpacing(6)
         recent.addLayout(self.recent_rows)
         content.addWidget(self.recent_offer)
         self.refresh_recent_files()
@@ -1766,16 +1813,44 @@ class PDFiu(QMainWindow):
             old = self.recent_rows.takeAt(0).widget()
             old.hide()
             old.deleteLater()
-        paths = self.recent_files()[:3 if self.welcome_offer.isHidden() else 2]
+        paths = self.recent_files()[:5 if self.welcome_offer.isHidden() else 3]
         for path in paths:
-            item = QPushButton(path.name.replace("&", "&&"))
+            item = button("", lambda file=path: self.open_recent_file(file))
+            item.setProperty("role", "recentCard")
             item.setToolTip(str(path))
-            item.setProperty("role", "flat")
-            item.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
-            item.setText(item.fontMetrics().elidedText(item.text(), Qt.TextElideMode.ElideMiddle, 385))
-            item.clicked.connect(lambda checked=False, file=path: self.open_recent_file(file))
+            item.setFixedHeight(52)
+            item.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+            row = QHBoxLayout(item)
+            row.setContentsMargins(10, 6, 10, 6)
+            row.setSpacing(10)
+            badge = QLabel()
+            badge.setPixmap(icon("document", 20).pixmap(20, 20))
+            badge.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+            row.addWidget(badge)
+            text_col = QVBoxLayout()
+            text_col.setContentsMargins(0, 0, 0, 0)
+            text_col.setSpacing(1)
+            title = QLabel(path.name)
+            title.setStyleSheet("font-weight: 600; font-size: 13px; background: transparent;")
+            title.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+            meta_parts = [path.parent.name or str(path.parent)]
+            try:
+                if path.is_file():
+                    meta_parts.append(file_size_label(path.stat().st_size))
+            except OSError:
+                pass
+            subtitle = QLabel(" · ".join(meta_parts), objectName="muted")
+            subtitle.setStyleSheet("font-size: 11px; background: transparent;")
+            subtitle.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+            text_col.addWidget(title)
+            text_col.addWidget(subtitle)
+            row.addLayout(text_col, 1)
+            arrow = QLabel()
+            arrow.setPixmap(icon("chevron-right", 16).pixmap(16, 16))
+            arrow.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+            row.addWidget(arrow)
             self.recent_rows.addWidget(item)
-        self.recent_offer.setMinimumHeight(28 + 35 * len(paths) if paths else 0)
+        self.recent_offer.setMinimumHeight(34 + 58 * len(paths) if paths else 0)
         self.recent_offer.setVisible(bool(paths))
 
     def build_tour_strip(self):
@@ -2009,6 +2084,8 @@ class PDFiu(QMainWindow):
         self.tour_spotlight.highlight(anchors, keep_bright=self.tour_panel)
 
     def show_tool_group(self, index):
+        if hasattr(self, "category_panel"):
+            self.category_panel.move_to(self.tool_group.button(index), animate=True)
         if index == self.tool_pages.currentIndex():
             return
         self.view.finish_inline()
@@ -2095,12 +2172,33 @@ class PDFiu(QMainWindow):
             self.favorite_names.extend(name for name in selected if name not in self.favorite_names)
             self.persist_favorites()
 
-    def sync_tool_panel(self):
+    def sync_tool_panel(self, *, animate=False):
         dock = next((item for item in (self.review_dock, self.surface_dock) if item.isVisible()), None)
         wide_or_open = self.width() >= self.compact_width or self.tools_compact_open
         visible = bool(self.path and self.fullscreen_state is None and self.focus_layout is None
                        and self.tools_requested and wide_or_open and dock is None)
-        self.tools.setVisible(visible)
+        if animate and self.isVisible() and visible != self.tools.isVisible():
+            if self._tool_panel_anim is not None:
+                self._tool_panel_anim.stop()
+            anim = QPropertyAnimation(self.tools, b"maximumWidth", self)
+            anim.setDuration(180)
+            anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+            if visible:
+                self.tools.setMaximumWidth(0)
+                self.tools.show()
+                anim.setStartValue(0)
+                anim.setEndValue(self._tool_panel_width)
+            else:
+                anim.setStartValue(self.tools.width() or self._tool_panel_width)
+                anim.setEndValue(0)
+                anim.finished.connect(self.tools.hide)
+            self._tool_panel_anim = anim
+            anim.start()
+        else:
+            if self._tool_panel_anim is not None:
+                self._tool_panel_anim.stop()
+            self.tools.setMaximumWidth(self._tool_panel_width if visible else 0)
+            self.tools.setVisible(visible)
         self.tool_toggle.setChecked(visible)
         self.update_workspace_hint()
         if dock is not None:
@@ -2115,7 +2213,7 @@ class PDFiu(QMainWindow):
                 dock.hide()
             self.tools_requested = True
             self.tools_compact_open = True
-            self.sync_tool_panel()
+            self.sync_tool_panel(animate=True)
             return
         docks = self.review_dock, self.surface_dock
         if any(dock.isVisible() for dock in docks):
@@ -2125,47 +2223,181 @@ class PDFiu(QMainWindow):
         else:
             self.tools_requested = self.tools.isHidden()
         self.tools_compact_open = self.tools_requested
-        self.sync_tool_panel()
+        self.sync_tool_panel(animate=True)
 
     def toggle_navigation(self):
         if self.fullscreen_state is not None:
             self.toggle_fullscreen()
         if self.focus_layout is not None:
             self.toggle_focus()
-            self.set_navigation(True)
+            self.set_navigation(True, animate=True)
             return
-        self.set_navigation(self.navigation_column.isHidden())
+        self.set_navigation(self.navigation_column.isHidden(), animate=True)
 
-    def set_navigation(self, visible):
+    def set_navigation(self, visible, *, animate=False):
         self.navigation_requested = visible
-        self.sync_navigation()
+        self.sync_navigation(animate=animate)
         self.update_tool_scope()
         self.schedule_thumbnails()
 
-    def sync_navigation(self):
+    def _animate_nav_column(self, visible):
+        if self._nav_anim is not None:
+            self._nav_anim.stop()
+        if not self.isVisible() or visible == self.navigation_column.isVisible():
+            if visible:
+                self.navigation_column.setMinimumWidth(220)
+                self.navigation_column.setMaximumWidth(640)
+            self.navigation_column.setVisible(visible)
+            return
+        anim = QPropertyAnimation(self.navigation_column, b"maximumWidth", self)
+        anim.setDuration(190)
+        anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        if visible:
+            target = max(220, min(640, self._nav_last_width or 260))
+            self.navigation_column.setMinimumWidth(0)
+            self.navigation_column.setMaximumWidth(0)
+            self.navigation_column.show()
+            anim.setStartValue(0)
+            anim.setEndValue(target)
+            def finish_open():
+                self.navigation_column.setMinimumWidth(220)
+                self.navigation_column.setMaximumWidth(640)
+                self.position_viewer_hud()
+            anim.finished.connect(finish_open)
+        else:
+            current = self.navigation_column.width()
+            if current >= 220:
+                self._nav_last_width = current
+            self.navigation_column.setMinimumWidth(0)
+            anim.setStartValue(max(1, current))
+            anim.setEndValue(0)
+            def finish_close():
+                self.navigation_column.hide()
+                self.navigation_column.setMinimumWidth(220)
+                self.navigation_column.setMaximumWidth(640)
+                self.position_viewer_hud()
+            anim.finished.connect(finish_close)
+        self._nav_anim = anim
+        anim.start()
+
+    def _animate_rail(self, visible):
+        if self._rail_anim is not None:
+            self._rail_anim.stop()
+        if not self.isVisible() or visible == self.navigation_shell.isVisible():
+            self.navigation_shell.setMinimumWidth(46 if visible else 0)
+            self.navigation_shell.setMaximumWidth(46 if visible else 0)
+            self.navigation_shell.setVisible(visible)
+            return
+        anim = QPropertyAnimation(self.navigation_shell, b"maximumWidth", self)
+        anim.setDuration(180)
+        anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self.navigation_shell.setMinimumWidth(0)
+        if visible:
+            self.navigation_shell.setMaximumWidth(0)
+            self.navigation_shell.show()
+            anim.setStartValue(0)
+            anim.setEndValue(46)
+            anim.finished.connect(lambda: (self.navigation_shell.setMinimumWidth(46), self.navigation_shell.setMaximumWidth(46)))
+        else:
+            anim.setStartValue(self.navigation_shell.width() or 46)
+            anim.setEndValue(0)
+            anim.finished.connect(self.navigation_shell.hide)
+        self._rail_anim = anim
+        anim.start()
+
+    def _fade_navigation_panel(self):
+        widget = self.navigation.currentWidget()
+        if widget is None or not self.navigation_column.isVisible():
+            return
+        effect = QGraphicsOpacityEffect(widget)
+        effect.setOpacity(0.25)
+        widget.setGraphicsEffect(effect)
+        anim = QPropertyAnimation(effect, b"opacity", self)
+        anim.setDuration(140)
+        anim.setStartValue(0.25)
+        anim.setEndValue(1.0)
+        anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        anim.finished.connect(lambda w=widget: w.setGraphicsEffect(None) if w is not None else None)
+        self._nav_fade_anim = anim
+        anim.start()
+
+    def _set_hud_opacity(self, target):
+        if not hasattr(self, "_hud_anim"):
+            return
+        self._hud_anim.stop()
+        self._hud_anim.setStartValue(self._hud_opacity.opacity())
+        self._hud_anim.setEndValue(target)
+        self._hud_anim.start()
+
+    def _wake_viewer_hud(self, *, sticky=False):
+        if not hasattr(self, "viewer_hud") or not self.viewer_hud.isVisible():
+            return
+        self._set_hud_opacity(1.0)
+        if sticky or self._hud_hovered or self.page_number.hasFocus() or self.hud_zoom_btn.menu().isVisible():
+            self._hud_idle_timer.stop()
+        else:
+            self._hud_idle_timer.start()
+
+    def _dim_viewer_hud(self):
+        if not hasattr(self, "viewer_hud") or not self.viewer_hud.isVisible():
+            return
+        if self._hud_hovered or self.page_number.hasFocus() or self.hud_zoom_btn.menu().isVisible():
+            return
+        self._set_hud_opacity(0.42)
+
+    def position_viewer_hud(self):
+        hud = getattr(self, "viewer_hud", None)
+        if hud is None or not hud.isVisible():
+            return
+        host = self.canvas
+        hud.adjustSize()
+        width = min(hud.sizeHint().width(), max(200, host.width() - 24))
+        height = hud.sizeHint().height()
+        x = max(12, (host.width() - width) // 2)
+        y = max(12, host.height() - height - 18)
+        hud.setGeometry(x, y, width, height)
+        hud.raise_()
+
+    def sync_navigation(self, *, animate=False):
         visible = bool(self.path and self.fullscreen_state is None and self.navigation_requested)
-        self.navigation_column.setVisible(visible)
+        if animate:
+            self._animate_nav_column(visible)
+        else:
+            if self._nav_anim is not None:
+                self._nav_anim.stop()
+            if visible:
+                self.navigation_column.setMinimumWidth(220)
+                self.navigation_column.setMaximumWidth(640)
+            self.navigation_column.setVisible(visible)
         self.navigation_toggle.setChecked(visible)
         rail = self.fullscreen_state is None and self.focus_layout is None
-        self.navigation_shell.setVisible(rail)
-        if hasattr(self, "reader_controls"):
-            self.reader_controls.setVisible(bool(self.path))
-            if rail != self.reader_in_rail:
-                origin, target = ((self.footer_layout, self.rail_layout) if rail else (self.rail_layout, self.footer_layout))
-                origin.removeWidget(self.reader_controls)
-                direction = QVBoxLayout.Direction.TopToBottom if rail else QHBoxLayout.Direction.LeftToRight
-                for layout in (self.reader_layout, self.reader_page_layout, self.reader_zoom_layout,
-                               self.reader_page_buttons.layout(), self.reader_zoom_buttons.layout()):
-                    layout.setDirection(direction)
-                target.insertWidget(target.count() if rail else target.count() - 2, self.reader_controls, 0,
-                                    Qt.AlignmentFlag.AlignHCenter if rail else Qt.AlignmentFlag(0))
-                self.reader_controls.setVisible(bool(self.path))
-                self.reader_in_rail = rail
+        if animate:
+            self._animate_rail(rail)
+        else:
+            if self._rail_anim is not None:
+                self._rail_anim.stop()
+            self.navigation_shell.setMinimumWidth(46 if rail else 0)
+            self.navigation_shell.setMaximumWidth(46 if rail else 0)
+            self.navigation_shell.setVisible(rail)
+        if hasattr(self, "viewer_hud"):
+            show_hud = bool(self.path)
+            was_visible = self.viewer_hud.isVisible()
+            self.viewer_hud.setVisible(show_hud)
+            if show_hud:
+                self.position_viewer_hud()
+                if not was_visible:
+                    self._wake_viewer_hud()
             self.update_page_controls()
         if hasattr(self, "rail_buttons"):
-            for panel, button in self.rail_buttons.items():
-                button.setEnabled(self.job is None and (self.path is not None or panel is self.work_tab))
-                button.setChecked(visible and self.navigation.currentWidget() is panel)
+            active_btn = None
+            for panel, btn in self.rail_buttons.items():
+                btn.setEnabled(self.job is None and (self.path is not None or panel is self.work_tab))
+                is_active = visible and self.navigation.currentWidget() is panel
+                btn.setChecked(is_active)
+                if is_active:
+                    active_btn = btn
+            if hasattr(self.navigation_rail, "move_indicator"):
+                self.navigation_rail.move_indicator(active_btn, animate=animate or self.isVisible())
         self.schedule_navigator()
 
     @staticmethod
@@ -2184,7 +2416,7 @@ class PDFiu(QMainWindow):
         layout.setContentsMargins(10, 11, 10, 10)
         header = QHBoxLayout()
         header.addWidget(QLabel(tr(title), objectName="panelLabel"), 1)
-        header.addWidget(icon_button(tr("Cerrar panel"), "close", lambda: self.set_navigation(False)))
+        header.addWidget(icon_button(tr("Cerrar panel"), "close", lambda: self.set_navigation(False, animate=True)))
         layout.addLayout(header)
         for index, widget in enumerate(widgets):
             layout.addWidget(widget, int(index == len(widgets) - 1))
@@ -2199,10 +2431,13 @@ class PDFiu(QMainWindow):
         if self.focus_layout is not None:
             self.toggle_focus()
         if toggle and self.navigation.currentWidget() is panel and self.navigation_requested:
-            self.set_navigation(False)
+            self.set_navigation(False, animate=True)
             return
+        changed = self.navigation.currentWidget() is not panel
         self.navigation.setCurrentWidget(panel)
-        self.set_navigation(True)
+        self.set_navigation(True, animate=True)
+        if changed:
+            self._fade_navigation_panel()
         if refresh:
             self.refresh_navigation_panel()
 
@@ -2227,20 +2462,20 @@ class PDFiu(QMainWindow):
         docks = self.review_dock, self.surface_dock
         if self.focus_layout is None:
             self.focus_layout = not self.navigation_column.isHidden(), [dock for dock in docks if dock.isVisible()]
-            self.set_navigation(False)
+            self.set_navigation(False, animate=True)
             for dock in docks:
                 dock.hide()
         else:
             navigation_visible, open_docks = self.focus_layout
             self.focus_layout = None
-            self.set_navigation(navigation_visible)
+            self.set_navigation(navigation_visible, animate=True)
             for dock in open_docks:
                 dock.show()
                 dock.raise_()
         self.focus_toggle.setChecked(self.focus_layout is not None)
         self.focus_toggle.setText(tr("Salir del enfoque") if self.focus_layout is not None else tr("Enfocar"))
         self.focus_toggle.setToolTip(f"{self.focus_toggle.text()} (F9)")
-        self.sync_tool_panel()
+        self.sync_tool_panel(animate=True)
 
     def toggle_two_page(self, enabled=None):
         if enabled is None:
@@ -2248,6 +2483,9 @@ class PDFiu(QMainWindow):
         for action in (self.menu_two_page, self.size_two_page_action):
             with QSignalBlocker(action):
                 action.setChecked(bool(enabled))
+        if hasattr(self, "hud_two_page_btn"):
+            with QSignalBlocker(self.hud_two_page_btn):
+                self.hud_two_page_btn.setChecked(bool(enabled))
         self.view.set_two_page(bool(enabled))
 
     def toggle_fullscreen(self):
@@ -2322,6 +2560,16 @@ class PDFiu(QMainWindow):
             self.schedule_thumbnails()
         elif watched is getattr(self, "name_label", None) and kind == QEvent.Type.Resize:
             self.elide_file_title()
+        hud = getattr(self, "viewer_hud", None)
+        if watched is getattr(self, "canvas", None) and kind in (QEvent.Type.Resize, QEvent.Type.Show):
+            self.position_viewer_hud()
+        if hud is not None and watched is hud:
+            if kind == QEvent.Type.Enter:
+                self._hud_hovered = True
+                self._wake_viewer_hud(sticky=True)
+            elif kind == QEvent.Type.Leave:
+                self._hud_hovered = False
+                self._wake_viewer_hud(sticky=False)
         view = getattr(self, "view", None)
         if view is not None:
             if kind == QEvent.Type.KeyPress and isinstance(watched, QWidget) and watched.window() is self:
@@ -2329,6 +2577,11 @@ class PDFiu(QMainWindow):
                     return True
             if kind == QEvent.Type.Resize and watched is view.viewport():
                 self.schedule_navigator()
+                self.position_viewer_hud()
+            elif kind == QEvent.Type.MouseMove and watched is view.viewport() and hud is not None and hud.isVisible():
+                pos = event.position().toPoint() if hasattr(event, "position") else event.pos()
+                if pos.y() >= view.viewport().height() - 105:
+                    self._wake_viewer_hud(sticky=False)
             elif kind == QEvent.Type.WindowDeactivate and watched is self:
                 view.stop_space_pan()
             elif kind in (QEvent.Type.KeyPress, QEvent.Type.KeyRelease) and event.key() == Qt.Key.Key_Space:
@@ -2435,7 +2688,12 @@ class PDFiu(QMainWindow):
         self.status.setToolTip(message)
 
     def update_zoom_level(self, value):
-        self.zoom_level.setText(f"{value} %")
+        label = f"{value} %"
+        self.zoom_level.setText(label)
+        if hasattr(self, "hud_zoom_btn"):
+            self.hud_zoom_btn.setText(label)
+            self.position_viewer_hud()
+            self._wake_viewer_hud(sticky=False)
 
     def apply_zoom_level(self):
         value = self.zoom_level.text().strip().removesuffix("%").strip()
@@ -2690,6 +2948,9 @@ class PDFiu(QMainWindow):
         changed = index != self.current
         self.current, self.coordinates = index, coordinates
         self.update_signature_targets(self.document_reader.pages[index], coordinates)
+        self.update_link_targets(self.document_reader.pages[index], coordinates)
+        if changed:
+            self._wake_viewer_hud(sticky=False)
         self.pages.blockSignals(True)
         if index != self.pages.currentRow():
             selection = QItemSelectionModel.SelectionFlag
@@ -2729,6 +2990,84 @@ class PDFiu(QMainWindow):
         except Exception:
             pass
         self.view.signature_targets = targets
+
+    def _resolve_link_destination(self, dest):
+        reader = self.document_reader
+        if reader is None or dest is None:
+            return None
+        try:
+            if hasattr(dest, "get_object"):
+                dest = dest.get_object()
+            if isinstance(dest, str):
+                named = reader.named_destinations.get(dest)
+                if named is not None:
+                    return reader.get_destination_page_number(named)
+                return None
+            if isinstance(dest, (list, tuple)) and dest:
+                target_page = dest[0]
+                if hasattr(target_page, "get_object"):
+                    target_page = target_page.get_object()
+                if isinstance(target_page, int):
+                    return target_page if 0 <= target_page < len(reader.pages) else None
+                for idx, candidate in enumerate(reader.pages):
+                    if candidate is target_page or getattr(candidate, "indirect_reference", None) == getattr(dest[0], "indirect_reference", dest[0]):
+                        return idx
+        except Exception:
+            return None
+        return None
+
+    def update_link_targets(self, page, coordinates):
+        targets = []
+        try:
+            annots = page.get("/Annots") or ()
+            if hasattr(annots, "get_object"):
+                annots = annots.get_object() or ()
+            for raw in annots:
+                annot = raw.get_object() if hasattr(raw, "get_object") else raw
+                if not isinstance(annot, dict) or annot.get("/Subtype") != "/Link":
+                    continue
+                box = annot.get("/Rect")
+                if not box or len(box) != 4:
+                    continue
+                x1, y1, x2, y2 = (float(v) for v in box)
+                if x1 >= x2 or y1 >= y2:
+                    continue
+                target = None
+                if "/Dest" in annot:
+                    page_idx = self._resolve_link_destination(annot.get("/Dest"))
+                    if page_idx is not None:
+                        target = ("page", page_idx)
+                elif "/A" in annot:
+                    action = annot.get("/A")
+                    if hasattr(action, "get_object"):
+                        action = action.get_object()
+                    if isinstance(action, dict):
+                        stype = action.get("/S")
+                        if stype == "/GoTo":
+                            page_idx = self._resolve_link_destination(action.get("/D"))
+                            if page_idx is not None:
+                                target = ("page", page_idx)
+                        elif stype == "/URI" and action.get("/URI"):
+                            target = ("uri", str(action.get("/URI")))
+                if target is not None:
+                    rect = QRectF(QPointF(*coordinates.device(x1, y1)),
+                                  QPointF(*coordinates.device(x2, y2))).normalized()
+                    targets.append((rect, target))
+        except Exception:
+            pass
+        self.view.link_targets = targets
+
+    def open_pdf_link(self, target):
+        if not target or self.job is not None:
+            return
+        kind, value = target
+        if kind == "page" and isinstance(value, int) and 0 <= value < self.count:
+            self.goto(value)
+            self._wake_viewer_hud(sticky=False)
+        elif kind == "uri" and value:
+            url = QUrl(str(value))
+            if url.scheme().lower() in ("http", "https", "mailto"):
+                QDesktopServices.openUrl(url)
 
     def clear_mode(self):
         self.measure_points.clear()

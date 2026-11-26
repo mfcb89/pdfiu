@@ -11,12 +11,12 @@ from PySide6.QtCore import QEvent, QMimeData, QPoint, QPointF, QRectF, QSize, Qt
 from PySide6.QtGui import QColor, QDrag, QImage, QKeySequence, QPainterPath, QPen, QPixmap, QTransform
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QComboBox, QFrame, QGraphicsDropShadowEffect, QGraphicsScene, QGraphicsView,
-    QLineEdit, QListWidget, QListWidgetItem, QMenu, QPlainTextEdit, QPushButton, QStyle, QStyleOptionViewItem,
+    QLabel, QLineEdit, QListWidget, QListWidgetItem, QMenu, QPlainTextEdit, QPushButton, QStyle, QStyleOptionViewItem,
     QStyledItemDelegate, QTabBar,
 )
 
 from pdf_ops import Coordinates, OperationCancelled, document_text, page_text, pdfium_reader, render_page, render_page_tile
-from pdfiu_ui import SEARCH_EXCERPT_ROLE, icon, text_line_boxes
+from pdfiu_ui import MotionButton, SEARCH_EXCERPT_ROLE, icon, text_line_boxes
 from tool_help import tool_hint
 from translations import tr
 
@@ -59,7 +59,7 @@ def file_size_label(count):
 
 
 def button(label, handler, *, primary=False, glyph=None):
-    widget = QPushButton(tr(label))
+    widget = MotionButton(tr(label))
     widget.setProperty("sourceLabel", label)
     widget.setToolTip(tool_hint(label))
     widget.setToolTipDuration(15000)
@@ -85,7 +85,7 @@ def icon_button(label, glyph, handler, *, size=32, glyph_size=20):
 
 
 def action_menu(label, entries, glyph=None):
-    control = QPushButton(tr(label))
+    control = MotionButton(tr(label))
     control.setProperty("sourceLabel", label)
     control.setToolTip(tool_hint(label))
     control.setToolTipDuration(15000)
@@ -135,6 +135,7 @@ class PageView(QGraphicsView):
     text_copied = Signal()
     form_clicked = Signal(QPointF)
     signature_clicked = Signal(str)
+    link_clicked = Signal(object)
     shape_drawn = Signal(QPointF, QPointF)
 
     def __init__(self):
@@ -158,6 +159,12 @@ class PageView(QGraphicsView):
         self.form_items = []
         self.form_rects = []
         self.signature_targets = []
+        self.link_targets = []
+        self._hovered_link = None
+        self._link_hover_item = None
+        self._link_pill = QLabel(self.viewport(), objectName="linkPill")
+        self._link_pill.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self._link_pill.hide()
         self.form_press = None
         self.inline_editor = None
         self.space_pan = False
@@ -187,6 +194,10 @@ class PageView(QGraphicsView):
         self.form_items.clear()
         self.form_rects.clear()
         self.signature_targets.clear()
+        self.link_targets.clear()
+        self._hovered_link = None
+        self._link_hover_item = None
+        self._link_pill.hide()
         self.form_press = None
         self.scene().clear()
         self.image_item = None
@@ -597,9 +608,14 @@ class PageView(QGraphicsView):
             if self.page_rect.contains(self.mapToScene(event.position().toPoint())):
                 point = self.page_point(event)
                 signature = next((name for rect, name in self.signature_targets if rect.contains(point)), None)
+                link = next((target for rect, target in self.link_targets if rect.contains(point)), None)
                 if signature is not None or any(rect.contains(point) for rect in self.form_rects):
                     self.clear_text()
                     self.form_press = (point, event.position(), signature)
+                elif link is not None:
+                    self.clear_text()
+                    self._clear_link_hover()
+                    self.link_clicked.emit(link)
                 else:
                     self.setFocus(Qt.FocusReason.MouseFocusReason)
                     self.begin_text(point)
@@ -669,15 +685,60 @@ class PageView(QGraphicsView):
             return
         if not self.mode and self.text_source:
             point = self.mapToScene(event.position().toPoint())
-            if (any(rect.contains(point) for rect, _ in self.signature_targets) or
-                    any(rect.contains(point) for rect in self.form_rects)):
+            hovered_link = next(((rect, target) for rect, target in self.link_targets if rect.contains(point)), None)
+            if hovered_link is not None:
+                self._show_link_hover(*hovered_link)
                 cursor = Qt.CursorShape.PointingHandCursor
-            elif self.page_rect.contains(point):
-                cursor = Qt.CursorShape.IBeamCursor
             else:
-                cursor = Qt.CursorShape.ArrowCursor
+                self._clear_link_hover()
+                if (any(rect.contains(point) for rect, _ in self.signature_targets) or
+                        any(rect.contains(point) for rect in self.form_rects)):
+                    cursor = Qt.CursorShape.PointingHandCursor
+                elif self.page_rect.contains(point):
+                    cursor = Qt.CursorShape.IBeamCursor
+                else:
+                    cursor = Qt.CursorShape.ArrowCursor
             self.setCursor(cursor)
         super().mouseMoveEvent(event)
+
+    def _clear_link_hover(self):
+        if self._link_hover_item is not None:
+            try:
+                self.scene().removeItem(self._link_hover_item)
+            except RuntimeError:
+                pass
+            self._link_hover_item = None
+        self._hovered_link = None
+        if self._link_pill.isVisible():
+            self._link_pill.hide()
+
+    def _show_link_hover(self, rect, target):
+        if self._hovered_link != (rect, target):
+            self._clear_link_hover()
+            self._hovered_link = (rect, target)
+            pen = QPen(QColor("#3b82f6"), 1.5)
+            pen.setCosmetic(True)
+            fill = QColor(59, 130, 246, 30)
+            self._link_hover_item = self.scene().addRect(rect, pen, fill)
+            self._link_hover_item.setZValue(90)
+            kind, value = target
+            if kind == "page":
+                label = tr("Página {0}").format(value + 1)
+            else:
+                label = str(value).removeprefix("https://").removeprefix("http://").split("/")[0] or str(value)
+            self._link_pill.setText(label)
+            self._link_pill.adjustSize()
+        top_center = self.mapFromScene(QPointF(rect.center().x(), rect.top()))
+        w, h = self._link_pill.width(), self._link_pill.height()
+        x = max(8, min(top_center.x() - w // 2, self.viewport().width() - w - 8))
+        y = max(8, top_center.y() - h - 8)
+        self._link_pill.move(x, y)
+        self._link_pill.show()
+        self._link_pill.raise_()
+
+    def leaveEvent(self, event):
+        self._clear_link_hover()
+        super().leaveEvent(event)
 
     def mouseReleaseEvent(self, event):
         if self.space_pan and event.button() == Qt.MouseButton.LeftButton:
