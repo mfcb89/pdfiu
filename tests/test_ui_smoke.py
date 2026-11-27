@@ -236,6 +236,67 @@ class UiSmokeTests(unittest.TestCase):
         self.assertEqual(window.raised, 2)
         self.assertEqual(window.activated, 2)
 
+    def test_word_line_shift_select_all_escape_and_search_prefill(self):
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from tempfile import TemporaryDirectory
+        from PySide6.QtCore import QPointF
+        from PySide6.QtWidgets import QApplication
+        from reportlab.pdfgen.canvas import Canvas
+        import pdfiu
+        from pdfiu_views import PageView
+
+        self.assertEqual(PageView.word_span_at("Hola mundo, prueba", 6), (5, 9))
+        self.assertEqual(PageView.word_span_at("Hola mundo, prueba", 1), (0, 3))
+
+        app = QApplication.instance() or QApplication([])
+        window = pdfiu.PDFiu(show_startup=False)
+        try:
+            with TemporaryDirectory() as tmp:
+                pdf_path = Path(tmp) / "office.pdf"
+                canvas = Canvas(str(pdf_path), pagesize=(595, 842))
+                canvas.setFont("Helvetica", 14)
+                canvas.drawString(72, 740, "Primera linea completa de texto")
+                canvas.drawString(72, 700, "Segunda linea diferente")
+                canvas.showPage()
+                canvas.drawString(72, 740, "Pagina dos")
+                canvas.showPage()
+                canvas.save()
+
+                window.open_path(pdf_path)
+                app.processEvents()
+                _, _, coords = window.view.text_source
+
+                # Double-click word selection
+                word_pt = QPointF(*coords.device(135, 745))
+                self.assertTrue(window.view.select_word_at(word_pt))
+                self.assertEqual(window.view.copied_text.strip(), "linea")
+
+                # Triple-click line selection
+                self.assertTrue(window.view.select_line_at(word_pt))
+                self.assertEqual(window.view.copied_text.strip(), "Primera linea completa de texto")
+
+                # Ctrl+F pre-fills selected text
+                window.open_search()
+                self.assertEqual(window.find_input.text(), "Primera linea completa de texto")
+                window.close_find_bar()
+
+                # Shift+Click extends selection to second line
+                second_pt = QPointF(*coords.device(160, 705))
+                self.assertTrue(window.view.extend_selection_to(second_pt))
+                self.assertIn("Segunda", window.view.copied_text)
+
+                # Esc clears active text selection
+                window.escape_view()
+                self.assertEqual(window.view.copied_text, "")
+
+                # Ctrl+A selects all text on current page
+                window.select_all_text()
+                self.assertIn("Primera linea", window.view.copied_text)
+                self.assertIn("Segunda linea diferente", window.view.copied_text)
+        finally:
+            window.dirty = False
+            window.close()
+
 
 if __name__ == "__main__":
     unittest.main()

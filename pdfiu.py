@@ -450,6 +450,7 @@ class PDFiu(QMainWindow):
         self.selection_tools.hide()
         self.view.selection_finished.connect(self.show_selection_actions)
         self.view.text_selection_changed.connect(lambda selected: self.selection_tools.hide() if not selected else None)
+        self.view.context_menu_requested.connect(self.show_view_context_menu)
         self.navigation_column = QWidget(objectName="navigationPanel")
         self.navigation_column.setMinimumWidth(220)
         self.navigation_column.setMaximumWidth(640)
@@ -909,6 +910,8 @@ class PDFiu(QMainWindow):
         self.shortcut("Ctrl+Shift+C", self.copy_page)
         self.shortcut("Esc", self.escape_view)
         self.shortcut("Ctrl+Return", self.finish_measure)
+        self.shortcut("Ctrl+Tab", lambda: self.step_doc_tab(1))
+        self.shortcut("Ctrl+Shift+Tab", lambda: self.step_doc_tab(-1))
         self.view.page()
         self.note(tr("Abre un PDF o arrástralo a la ventana."))
         self.enable_controls()
@@ -980,6 +983,7 @@ class PDFiu(QMainWindow):
         edit.addSeparator()
         self.menu_copy_text = add(edit, tr("Copiar texto seleccionado"), self.copy_text, key.Copy)
         self.menu_copy_text.setEnabled(False)
+        self.menu_select_all = add(edit, tr("Seleccionar todo"), self.select_all_text, key.SelectAll)
         self.view.text_selection_changed.connect(self.update_text_selection)
         self.view.text_copied.connect(lambda: self.note(tr("Texto copiado al portapapeles.")))
         edit.addSeparator()
@@ -988,7 +992,7 @@ class PDFiu(QMainWindow):
         previous_match = add(edit, tr("Coincidencia anterior"), lambda: self.step_search(-1), key.FindPrevious, "Shift+F3")
         preferences = add(edit, tr("&Preferencias…"), self.show_preferences, key.Preferences, "Ctrl+,")
         preferences.setMenuRole(QAction.MenuRole.PreferencesRole)
-        self.document_controls += (find, next_match, previous_match)
+        self.document_controls += (self.menu_select_all, find, next_match, previous_match)
 
         view = bar.addMenu(tr("&Vista"))
         self.menu_two_page = view.addAction(tr("Doble página"))
@@ -1000,6 +1004,7 @@ class PDFiu(QMainWindow):
         self.document_controls += (
             add(view, tr("Acercar"), lambda: self.view.zoom(1.25), key.ZoomIn, "Ctrl+="),
             add(view, tr("Alejar"), lambda: self.view.zoom(0.8), key.ZoomOut),
+            add(view, tr("Tamaño real (100 %)"), lambda: self.view.set_percent(100), None, "Ctrl+1"),
             add(view, tr("Ajustar página"), self.view.fit_page, None, "Ctrl+0"),
         )
         view.addSeparator()
@@ -2518,6 +2523,8 @@ class PDFiu(QMainWindow):
             self.close_find_bar()
         elif self.fullscreen_state is not None:
             self.toggle_fullscreen()
+        elif self.view.copied_text.strip():
+            self.view.clear_text()
         else:
             self.clear_mode()
 
@@ -2591,7 +2598,8 @@ class PDFiu(QMainWindow):
 
     def handle_page_keys(self, watched, event):
         key = event.key()
-        if key not in (Qt.Key.Key_Left, Qt.Key.Key_Right, Qt.Key.Key_PageUp, Qt.Key.Key_PageDown):
+        if key not in (Qt.Key.Key_Left, Qt.Key.Key_Right, Qt.Key.Key_PageUp, Qt.Key.Key_PageDown,
+                       Qt.Key.Key_Home, Qt.Key.Key_End):
             return False
         if not self.path or self.job is not None or int(event.modifiers().value) or QApplication.activePopupWidget():
             return False
@@ -2602,7 +2610,12 @@ class PDFiu(QMainWindow):
         for panel in (self.navigation, self.review_widget, self.surface_dock):
             if watched is not self.view and panel.isAncestorOf(watched):
                 return False
-        self.goto(self.current + (-1 if key in (Qt.Key.Key_Left, Qt.Key.Key_PageUp) else 1))
+        if key == Qt.Key.Key_Home:
+            self.goto(0)
+        elif key == Qt.Key.Key_End:
+            self.goto(self.count - 1)
+        else:
+            self.goto(self.current + (-1 if key in (Qt.Key.Key_Left, Qt.Key.Key_PageUp) else 1))
         return True
 
     def handle_space_pan(self, event):
@@ -5296,20 +5309,61 @@ class PDFiu(QMainWindow):
                 self.search_accents.setChecked(checked)
         self.schedule_search()
 
-    def open_search(self):
+    def open_search(self, *, use_selection=True):
         if self.path is None or self.job is not None:
             return
         if self.fullscreen_state is not None:
             self.toggle_fullscreen()
         self.find_bar.show()
+        selected = " ".join(self.view.copied_text.split())[:160] if use_selection and self.view.copied_text.strip() else ""
+        initial = selected or self.query.text()
         with QSignalBlocker(self.find_input):
-            self.find_input.setText(self.query.text())
+            self.find_input.setText(initial)
+        if selected:
+            with QSignalBlocker(self.query):
+                self.query.setText(selected)
         with QSignalBlocker(self.find_accents_btn):
             self.find_accents_btn.setChecked(self.search_accents.isChecked())
         self.find_input.setFocus()
         self.find_input.selectAll()
         if self.find_input.text().strip():
             self.schedule_search()
+
+    def select_all_text(self):
+        focus = QApplication.focusWidget()
+        if isinstance(focus, (QLineEdit, QPlainTextEdit, QTextBrowser)) and focus is not self.view:
+            focus.selectAll()
+            return
+        if self.path and self.job is None and not self.view.mode:
+            self.view.select_all_text()
+
+    def step_doc_tab(self, delta):
+        count = self.doc_tabs.count()
+        if count > 1 and self.job is None:
+            self.doc_tabs.setCurrentIndex((self.doc_tabs.currentIndex() + delta) % count)
+
+    def show_view_context_menu(self, global_pos):
+        if not self.path or self.job is not None:
+            return
+        menu = QMenu(self)
+        has_selection = bool(self.view.copied_text.strip())
+        if has_selection:
+            menu.addAction(tr("Copiar texto"), self.copy_text)
+            menu.addAction(tr("Resaltar"), self.highlight_selection)
+            menu.addAction(tr("Subrayar"), lambda: self.highlight_selection(underline=True))
+            menu.addAction(tr("Buscar texto seleccionado"), lambda: self.open_search(use_selection=True))
+            menu.addSeparator()
+        if not self.view.mode:
+            menu.addAction(tr("Seleccionar todo"), self.select_all_text)
+            menu.addSeparator()
+        menu.addAction(tr("Acercar"), lambda: self.view.zoom(1.25))
+        menu.addAction(tr("Alejar"), lambda: self.view.zoom(0.8))
+        menu.addAction(tr("Tamaño real (100 %)"), lambda: self.view.set_percent(100))
+        menu.addAction(tr("Ajustar página"), self.view.fit_page)
+        menu.addAction(tr("Ajustar ancho"), self.view.fit_width)
+        menu.addSeparator()
+        menu.addAction(tr("Buscar texto"), lambda: self.open_search(use_selection=False))
+        menu.exec(global_pos)
 
     def open_search_panel(self):
         if self.path is None or self.job is not None:

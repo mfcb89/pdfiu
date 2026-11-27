@@ -6,6 +6,7 @@ from dataclasses import dataclass, field as dataclass_field
 from math import ceil, floor
 from pathlib import Path
 import json
+import time
 
 from PySide6.QtCore import QEvent, QMimeData, QPoint, QPointF, QRectF, QSize, Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QColor, QDrag, QImage, QKeySequence, QPainterPath, QPen, QPixmap, QTransform
@@ -137,6 +138,7 @@ class PageView(QGraphicsView):
     signature_clicked = Signal(str)
     link_clicked = Signal(object)
     shape_drawn = Signal(QPointF, QPointF)
+    context_menu_requested = Signal(QPoint)
 
     def __init__(self):
         super().__init__()
@@ -155,6 +157,9 @@ class PageView(QGraphicsView):
         self.text_handles = ExitStack()
         self.text_page = None
         self.text_anchor = self.text_end = None
+        self._selection_anchor = None
+        self._last_double_click_time = 0.0
+        self._last_double_click_pos = QPointF()
         self.text_marks = []
         self.form_items = []
         self.form_rects = []
@@ -168,6 +173,7 @@ class PageView(QGraphicsView):
         self.form_press = None
         self.inline_editor = None
         self.space_pan = False
+        self._middle_pan = False
         self.pan_anchor = None
         self.shape_preview_color = QColor("#3569aa")
         self.shape_preview_width = 2
@@ -317,12 +323,198 @@ class PageView(QGraphicsView):
         else:
             super().wheelEvent(event)
 
+    def viewportEvent(self, event):
+        if event.type() == QEvent.Type.NativeGesture and not self.page_rect.isEmpty():
+            if event.gestureType() == Qt.NativeGestureType.ZoomNativeGesture:
+                factor = max(0.5, min(2.0, 1.0 + event.value()))
+                self.zoom(factor, at_mouse=True)
+                event.accept()
+                return True
+        return super().viewportEvent(event)
+
     def clear_text(self):
         self.text_handles.close()
         self.text_page = None
         self.text_anchor = self.text_end = None
+        self._selection_anchor = None
         self.set_copied_text("")
         self.clear_text_marks()
+
+    @staticmethod
+    def word_span_at(text, index):
+        if not text:
+            return 0, 0
+        index = max(0, min(index, len(text) - 1))
+        if text[index] in "\r\n" and index > 0 and text[index - 1] not in "\r\n":
+            index -= 1
+        ch = text[index]
+        if ch in "\r\n":
+            return index, index
+        if ch.isalnum() or ch == "_":
+            pred = lambda c: c.isalnum() or c == "_"
+        elif ch.isspace():
+            pred = lambda c: c.isspace() and c not in "\r\n"
+        else:
+            pred = lambda c: not (c.isalnum() or c == "_" or c.isspace())
+        start = stop = index
+        while start > 0 and pred(text[start - 1]):
+            start -= 1
+        while stop + 1 < len(text) and pred(text[stop + 1]):
+            stop += 1
+        return start, stop
+
+    @staticmethod
+    def line_span_at(content, index):
+        total = content.count_chars()
+        if total <= 0:
+            return 0, 0
+        index = max(0, min(index, total - 1))
+        full = content.get_text_range()
+        direct = len(full) == total
+
+        def char_at(pos):
+            return full[pos] if direct else (content.get_text_range(pos, 1) or "")
+
+        if char_at(index) in "\r\n" and index > 0 and char_at(index - 1) not in "\r\n":
+            index -= 1
+        raw_start = raw_end = index
+        while raw_start > 0 and char_at(raw_start - 1) not in "\r\n":
+            raw_start -= 1
+        while raw_end + 1 < total and char_at(raw_end + 1) not in "\r\n":
+            raw_end += 1
+
+        try:
+            _, b0, _, t0 = content.get_charbox(index)
+            ref_h = max(abs(t0 - b0), 4.0)
+            ref_cy = (b0 + t0) / 2.0
+            tol = max(ref_h * 0.8, 5.0)
+        except Exception:
+            return raw_start, raw_end
+
+        def same_visual_line(pos):
+            ch = char_at(pos)
+            if not ch or ch in "\r\n":
+                return False
+            if ch.isspace():
+                return True
+            try:
+                _, b, _, t = content.get_charbox(pos)
+                if b == t == 0:
+                    return True
+                return abs((b + t) / 2.0 - ref_cy) <= tol
+            except Exception:
+                return True
+
+        start = stop = index
+        while start > raw_start and same_visual_line(start - 1):
+            start -= 1
+        while stop < raw_end and same_visual_line(stop + 1):
+            stop += 1
+        while start < stop and char_at(start).isspace():
+            start += 1
+        while stop > start and char_at(stop).isspace():
+            stop -= 1
+        return start, stop
+
+    def _select_range_from_content(self, content, coordinates, start, stop, *, anchor=None, notify_point=None):
+        count = stop - start + 1
+        if count <= 0:
+            self.clear_text()
+            return False
+        content.count_rects()
+        self.mark_text_range(content, coordinates, start, count)
+        self._selection_anchor = start if anchor is None else anchor
+        self.set_copied_text(content.get_text_range(start, count))
+        if self.copied_text.strip() and notify_point is not None:
+            self.selection_finished.emit(self.mapFromScene(notify_point))
+        return bool(self.copied_text.strip())
+
+    def select_word_at(self, point):
+        if not self.text_source:
+            return False
+        self.clear_text()
+        try:
+            path, index, coordinates = self.text_source
+            with page_text(path, index, password=self.password) as content:
+                total = content.count_chars()
+                if not total:
+                    self.text_error.emit(tr("Esta página no tiene texto seleccionable. Aplica OCR si es un escaneo."))
+                    return False
+                hit = content.get_index(*coordinates.at(point.x(), point.y()), 12, 8)
+                if hit is None:
+                    return False
+                full = content.get_text_range()
+                if len(full) == total:
+                    start, stop = self.word_span_at(full, hit)
+                else:
+                    start, stop = hit, hit
+                return self._select_range_from_content(content, coordinates, start, stop, anchor=start, notify_point=point)
+        except Exception as error:
+            self.clear_text()
+            self.text_error.emit(str(error))
+            return False
+
+    def select_line_at(self, point):
+        if not self.text_source:
+            return False
+        self.clear_text()
+        try:
+            path, index, coordinates = self.text_source
+            with page_text(path, index, password=self.password) as content:
+                if not content.count_chars():
+                    self.text_error.emit(tr("Esta página no tiene texto seleccionable. Aplica OCR si es un escaneo."))
+                    return False
+                hit = content.get_index(*coordinates.at(point.x(), point.y()), 16, 12)
+                if hit is None:
+                    hit = content.get_index(*coordinates.at(point.x(), point.y()), 144, 12)
+                if hit is None:
+                    return False
+                start, stop = self.line_span_at(content, hit)
+                return self._select_range_from_content(content, coordinates, start, stop, anchor=start, notify_point=point)
+        except Exception as error:
+            self.clear_text()
+            self.text_error.emit(str(error))
+            return False
+
+    def extend_selection_to(self, point):
+        if not self.text_source or self._selection_anchor is None:
+            return False
+        anchor = self._selection_anchor
+        try:
+            path, index, coordinates = self.text_source
+            with page_text(path, index, password=self.password) as content:
+                total = content.count_chars()
+                if not total:
+                    return False
+                x, y = coordinates.at(point.x(), point.y())
+                end = content.get_index(x, y, 12, 12)
+                if end is None:
+                    end = content.get_index(x, y, 144, 12)
+                if end is None:
+                    return False
+                start, stop = sorted((max(0, min(anchor, total - 1)), end))
+                return self._select_range_from_content(content, coordinates, start, stop, anchor=anchor, notify_point=point)
+        except Exception as error:
+            self.clear_text()
+            self.text_error.emit(str(error))
+            return False
+
+    def select_all_text(self):
+        if not self.text_source:
+            return False
+        self.clear_text()
+        try:
+            path, index, coordinates = self.text_source
+            with page_text(path, index, password=self.password) as content:
+                total = content.count_chars()
+                if not total:
+                    self.text_error.emit(tr("Esta página no tiene texto seleccionable. Aplica OCR si es un escaneo."))
+                    return False
+                return self._select_range_from_content(content, coordinates, 0, total - 1, anchor=0)
+        except Exception as error:
+            self.clear_text()
+            self.text_error.emit(str(error))
+            return False
 
     def set_copied_text(self, value):
         self.copied_text = value
@@ -395,6 +587,7 @@ class PageView(QGraphicsView):
             self.extend_text(point)
             if self.text_end is not None:
                 start, stop = sorted((self.text_anchor, self.text_end))
+                self._selection_anchor = self.text_anchor
                 self.set_copied_text(self.text_page.get_text_range(start, stop - start + 1))
                 if self.copied_text.strip():
                     self.selection_finished.emit(self.mapFromScene(point))
@@ -418,10 +611,17 @@ class PageView(QGraphicsView):
                 self.text_error.emit(tr("Selecciona el texto arrastrando sobre la página y vuelve a pulsar Ctrl+C."))
             event.accept()
             return
+        if self.inline_editor is None and not self.mode and event.matches(QKeySequence.StandardKey.SelectAll):
+            if self.select_all_text():
+                event.accept()
+                return
         super().keyPressEvent(event)
 
     def contextMenuEvent(self, event):
-        if self.copied_text.strip():
+        if self.text_source:
+            self.context_menu_requested.emit(event.globalPos())
+            event.accept()
+        elif self.copied_text.strip():
             menu = QMenu(self)
             menu.addAction(tr("Copiar texto"), self.copy_text)
             menu.exec(event.globalPos())
@@ -589,6 +789,13 @@ class PageView(QGraphicsView):
         )
 
     def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.MiddleButton and not self.page_rect.isEmpty():
+            self.setFocus(Qt.FocusReason.MouseFocusReason)
+            self._middle_pan = True
+            self.pan_anchor = event.position().toPoint()
+            self.setCursor(Qt.CursorShape.ClosedHandCursor)
+            event.accept()
+            return
         if self.space_pan and event.button() == Qt.MouseButton.LeftButton:
             self.setFocus(Qt.FocusReason.MouseFocusReason)
             self.pan_anchor = event.position().toPoint()
@@ -607,6 +814,19 @@ class PageView(QGraphicsView):
         if not self.mode and self.text_source and event.button() == Qt.MouseButton.LeftButton:
             if self.page_rect.contains(self.mapToScene(event.position().toPoint())):
                 point = self.page_point(event)
+                now = time.monotonic()
+                if ((now - self._last_double_click_time) * 1000 <= QApplication.doubleClickInterval() and
+                        (event.position() - self._last_double_click_pos).manhattanLength() <= max(12, QApplication.startDragDistance() * 2)):
+                    self._last_double_click_time = 0.0
+                    self.setFocus(Qt.FocusReason.MouseFocusReason)
+                    self.select_line_at(point)
+                    event.accept()
+                    return
+                if (event.modifiers() & Qt.KeyboardModifier.ShiftModifier) and self._selection_anchor is not None:
+                    self.setFocus(Qt.FocusReason.MouseFocusReason)
+                    self.extend_selection_to(point)
+                    event.accept()
+                    return
                 signature = next((name for rect, name in self.signature_targets if rect.contains(point)), None)
                 link = next((target for rect, target in self.link_targets if rect.contains(point)), None)
                 if signature is not None or any(rect.contains(point) for rect in self.form_rects):
@@ -629,8 +849,27 @@ class PageView(QGraphicsView):
             return
         super().mousePressEvent(event)
 
+    def mouseDoubleClickEvent(self, event):
+        if (not self.mode and not self.space_pan and self.text_source and
+                event.button() == Qt.MouseButton.LeftButton and
+                self.page_rect.contains(self.mapToScene(event.position().toPoint()))):
+            if self.inline_editor and self.inline_editor[0].sceneBoundingRect().contains(
+                self.mapToScene(event.position().toPoint())
+            ):
+                super().mouseDoubleClickEvent(event)
+                return
+            point = self.page_point(event)
+            self._last_double_click_time = time.monotonic()
+            self._last_double_click_pos = event.position()
+            self.form_press = None
+            self.setFocus(Qt.FocusReason.MouseFocusReason)
+            self.select_word_at(point)
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
+
     def mouseMoveEvent(self, event):
-        if self.space_pan:
+        if self.space_pan or self._middle_pan:
             if self.pan_anchor is not None:
                 position = event.position().toPoint()
                 delta = self.pan_anchor - position
@@ -741,6 +980,12 @@ class PageView(QGraphicsView):
         super().leaveEvent(event)
 
     def mouseReleaseEvent(self, event):
+        if self._middle_pan and event.button() == Qt.MouseButton.MiddleButton:
+            self._middle_pan = False
+            self.pan_anchor = None
+            self.update_mode_cursor()
+            event.accept()
+            return
         if self.space_pan and event.button() == Qt.MouseButton.LeftButton:
             self.pan_anchor = None
             self.update_mode_cursor()
@@ -1125,6 +1370,20 @@ class ContinuousPageView(PageView):
                             return
                         break
         super().mousePressEvent(event)
+
+    def mouseDoubleClickEvent(self, event):
+        if self.source and event.button() == Qt.MouseButton.LeftButton and not self.space_pan and self.mode != "pan":
+            point = self.mapToScene(event.position().toPoint())
+            start = bisect_left(self.bottoms, point.y())
+            for candidate in range(start, min(len(self.frames), start + 2)):
+                if self.frames[candidate].contains(point):
+                    try:
+                        self.activate(candidate)
+                    except Exception as error:
+                        self.text_error.emit(str(error))
+                        return
+                    break
+        super().mouseDoubleClickEvent(event)
 
 
 class BookmarkRows(QStyledItemDelegate):
