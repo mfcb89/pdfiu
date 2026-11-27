@@ -966,6 +966,9 @@ QRadioButton::indicator:checked {
 QFrame#dialogCard { background: #fff; border: 1px solid #d8e3de; border-radius: 10px; }
 QFrame#dialogCard[selected="true"] { background: #edf7f3; border: 1.5px solid #317f72; }
 QFrame#dialogCard:hover { border-color: #9ec5ba; }
+QLabel#shortcutSection { font-size: 13px; font-weight: 700; color: #19483f; }
+QWidget#shortcutRow { background: transparent; }
+QLabel#shortcutKey { background: #eef4f1; color: #182a3d; border: 1px solid #d5e0db; border-radius: 5px; padding: 2px 8px; font-size: 12px; font-weight: 600; }
 QGroupBox { border: 1px solid #dce6e1; border-radius: 9px; margin-top: 12px; padding: 12px 10px 10px; font-weight: 600; }
 QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 5px; color: #182a3d; }
 QMessageBox QLabel#qt_msgbox_label { font-size: 14px; font-weight: 600; color: #182a3d; }
@@ -1294,6 +1297,9 @@ QRadioButton::indicator:checked {
 QFrame#dialogCard { background: #1c222b; border: 1px solid #2e3846; border-radius: 10px; }
 QFrame#dialogCard[selected="true"] { background: #19312d; border: 1.5px solid #4fb39d; }
 QFrame#dialogCard:hover { border-color: #46586e; }
+QLabel#shortcutSection { font-size: 13px; font-weight: 700; color: #6ee7b7; }
+QWidget#shortcutRow { background: transparent; }
+QLabel#shortcutKey { background: #141920; color: #e6edf3; border: 1px solid #303a47; border-radius: 5px; padding: 2px 8px; font-size: 12px; font-weight: 600; }
 QGroupBox { border: 1px solid #2b3440; border-radius: 9px; margin-top: 12px; padding: 12px 10px 10px; font-weight: 600; color: #e6edf3; }
 QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 5px; color: #e6edf3; }
 QMessageBox QLabel#qt_msgbox_label { font-size: 14px; font-weight: 600; color: #f0f6fc; }

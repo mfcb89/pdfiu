@@ -3,6 +3,7 @@
 import base64
 from html import escape
 from pathlib import Path
+import sys
 import unicodedata
 
 from PySide6.QtCore import QEasingCurve, QEvent, QMimeData, QPoint, QPropertyAnimation, QRect, QRectF, QSignalBlocker, QSize, Qt, QTimer
@@ -10,7 +11,7 @@ from PySide6.QtGui import QColor, QDrag, QFont, QIcon, QPainter, QPen, QPixmap, 
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QButtonGroup, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox, QFileDialog,
     QFormLayout, QFrame, QGraphicsDropShadowEffect, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget, QListWidgetItem, QPushButton, QRadioButton,
-    QSlider, QSpinBox, QStackedWidget, QStyle, QStyledItemDelegate, QVBoxLayout, QWidget,
+    QScrollArea, QSlider, QSpinBox, QStackedWidget, QStyle, QStyledItemDelegate, QVBoxLayout, QWidget,
 )
 
 from pdf_ops import load_stamp_image, pdfium_reader, project_signature_box, reader_for, render_page, signature_boxes, signature_plan
@@ -1684,3 +1685,142 @@ class VisualSignatureDialog(QDialog):
             self.preview.setPixmap(QPixmap())
             self.preview.setText(tr("No se pudo cargar la firma: {0}").format(error))
             self.place_btn.setEnabled(False)
+
+
+class ShortcutsDialog(QDialog):
+    """Searchable reference of keyboard shortcuts and mouse gestures."""
+
+    @staticmethod
+    def _fold(text):
+        return "".join(
+            ch for ch in unicodedata.normalize("NFD", text.casefold())
+            if not unicodedata.combining(ch)
+        )
+
+    @staticmethod
+    def sections(is_mac=None):
+        if is_mac is None:
+            is_mac = sys.platform == "darwin"
+        mod = "⌘" if is_mac else "Ctrl+"
+        shift_mod = "⇧⌘" if is_mac else "Ctrl+Shift+"
+        return (
+            (tr("Selección y ratón"), (
+                (tr("Seleccionar palabra"), tr("Doble clic")),
+                (tr("Seleccionar línea completa"), tr("Triple clic")),
+                (tr("Ampliar selección"), tr("Shift + clic")),
+                (tr("Seleccionar todo el texto de la página"), f"{mod}A"),
+                (tr("Copiar texto seleccionado"), f"{mod}C"),
+                (tr("Quitar selección / cerrar barra"), "Esc"),
+                (tr("Menú contextual de la página"), tr("Clic derecho")),
+            )),
+            (tr("Navegación y zoom"), (
+                (tr("Desplazar página (mano)"), tr("Espacio + arrastrar · Botón central")),
+                (tr("Acercar / alejar con precisión"),
+                 tr("Pellizco en trackpad · Ctrl + rueda") if is_mac else tr("Ctrl + rueda del ratón")),
+                (tr("Acercar"), f"{mod}+" if is_mac else "Ctrl+="),
+                (tr("Alejar"), f"{mod}-"),
+                (tr("Tamaño real (100 %)"), f"{mod}1"),
+                (tr("Ajustar página"), f"{mod}0"),
+                (tr("Doble página"), f"{mod}2"),
+                (tr("Página anterior / siguiente"), "← / → · RePág / AvPág"),
+                (tr("Primera / última página"), tr("Inicio / Fin")),
+                (tr("Enfocar documento"), "F9"),
+                (tr("Pantalla completa"), "⌃⌘F · F11" if is_mac else "F11"),
+            )),
+            (tr("Búsqueda y edición"), (
+                (tr("Buscar texto (precarga la selección)"), f"{mod}F"),
+                (tr("Siguiente / anterior coincidencia"), "⌘G / ⇧⌘G · F3" if is_mac else "F3 / Shift+F3"),
+                (tr("Deshacer"), f"{mod}Z"),
+                (tr("Rehacer"), "⇧⌘Z" if is_mac else "Ctrl+Y · Ctrl+Shift+Z"),
+                (tr("Copiar página como imagen"), f"{shift_mod}C"),
+                (tr("Terminar medición"), f"{mod}↵" if is_mac else "Ctrl+Enter"),
+            )),
+            (tr("Documentos y aplicación"), (
+                (tr("Abrir PDF"), f"{mod}O"),
+                (tr("Guardar / Guardar como…"), f"{mod}S / {shift_mod}S"),
+                (tr("Imprimir"), f"{mod}P"),
+                (tr("Cambiar de pestaña"), "Ctrl+Tab / Ctrl+Shift+Tab"),
+                (tr("Cerrar PDF / Cerrar todos"), f"{mod}W / {shift_mod}W"),
+                (tr("Propiedades del documento"), "⌘I" if is_mac else "Ctrl+D"),
+                (tr("Paleta de comandos"), f"{mod}K"),
+                (tr("Atajos de teclado y ratón"), f"{mod}/"),
+                (tr("Preferencias"), f"{mod},"),
+            )),
+        )
+
+    def __init__(self, parent=None, *, is_mac=None):
+        super().__init__(parent)
+        self.setWindowTitle(tr("Atajos de teclado y ratón"))
+        self.resize(650, 560)
+        self.setMinimumSize(520, 400)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 18, 20, 16)
+        layout.setSpacing(12)
+
+        self.filter_input = QLineEdit()
+        self.filter_input.setPlaceholderText(tr("Filtrar atajos…"))
+        self.filter_input.setClearButtonEnabled(True)
+        layout.addWidget(self.filter_input)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        body = QWidget()
+        body_layout = QVBoxLayout(body)
+        body_layout.setContentsMargins(0, 0, 6, 0)
+        body_layout.setSpacing(12)
+
+        self._cards = []
+        for title, entries in self.sections(is_mac=is_mac):
+            card = QFrame(objectName="dialogCard")
+            card_layout = QVBoxLayout(card)
+            card_layout.setContentsMargins(16, 12, 16, 12)
+            card_layout.setSpacing(7)
+            heading = QLabel(title, objectName="shortcutSection")
+            card_layout.addWidget(heading)
+            rows = []
+            for label_text, keys_text in entries:
+                row_widget = QWidget(objectName="shortcutRow")
+                row_layout = QHBoxLayout(row_widget)
+                row_layout.setContentsMargins(0, 2, 0, 2)
+                row_layout.setSpacing(12)
+                desc = QLabel(label_text)
+                desc.setWordWrap(True)
+                badge = QLabel(keys_text, objectName="shortcutKey")
+                badge.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                row_layout.addWidget(desc, 1)
+                row_layout.addWidget(badge, 0, Qt.AlignmentFlag.AlignRight)
+                card_layout.addWidget(row_widget)
+                rows.append((row_widget, self._fold(f"{title} {label_text} {keys_text}")))
+            body_layout.addWidget(card)
+            self._cards.append((card, rows))
+
+        self.empty_label = QLabel(tr("No hay atajos que coincidan con el filtro."), objectName="muted")
+        self.empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.empty_label.hide()
+        body_layout.addWidget(self.empty_label)
+        body_layout.addStretch(1)
+        scroll.setWidget(body)
+        layout.addWidget(scroll, 1)
+
+        controls = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        controls.button(QDialogButtonBox.StandardButton.Close).setText(tr("Cerrar"))
+        controls.rejected.connect(self.reject)
+        layout.addWidget(controls)
+
+        self.filter_input.textChanged.connect(self.apply_filter)
+        self.filter_input.setFocus()
+
+    def apply_filter(self, query):
+        terms = self._fold(query).split()
+        any_visible = False
+        for card, rows in self._cards:
+            card_visible = False
+            for row_widget, haystack in rows:
+                visible = all(term in haystack for term in terms)
+                row_widget.setVisible(visible)
+                card_visible = card_visible or visible
+            card.setVisible(card_visible)
+            any_visible = any_visible or card_visible
+        self.empty_label.setVisible(not any_visible)

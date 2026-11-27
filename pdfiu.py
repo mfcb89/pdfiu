@@ -57,7 +57,7 @@ from pdfiu_views import (
 )
 from pdfiu_dialogs import (
     BatchDialog, CertificateDialog, CommandPaletteDialog, CompressDialog, CompressionPreview, MergeDialog,
-    OrganizePagesDialog, RevisionComparison, SplitDialog, VisualSignatureDialog,
+    OrganizePagesDialog, RevisionComparison, ShortcutsDialog, SplitDialog, VisualSignatureDialog,
 )
 
 
@@ -1013,6 +1013,7 @@ class PDFiu(QMainWindow):
 
         help_menu = bar.addMenu(tr("A&yuda"))
         add(help_menu, tr("Paleta de comandos…"), self.open_command_palette, None, "Ctrl+K")
+        add(help_menu, tr("Atajos de teclado y ratón…"), self.show_shortcuts, None, "Ctrl+/")
         add(help_menu, tr("Visita guiada…"), self.start_tour)
         add(help_menu, tr("Guía de herramientas…"), self.open_welcome_guide, key.HelpContents)
         self.menu_update = add(help_menu, tr("&Buscar actualizaciones…"), self.check_updates)
@@ -1507,6 +1508,9 @@ class PDFiu(QMainWindow):
         dialog = CommandPaletteDialog(self.collect_palette_commands(), self)
         if dialog.exec() and dialog.chosen is not None:
             dialog.chosen()
+
+    def show_shortcuts(self):
+        ShortcutsDialog(self).exec()
 
     def show_about(self):
         dialog = QDialog(self)

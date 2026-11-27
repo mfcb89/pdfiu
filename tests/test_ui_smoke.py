@@ -297,6 +297,30 @@ class UiSmokeTests(unittest.TestCase):
             window.dirty = False
             window.close()
 
+    def test_shortcuts_dialog_builds_and_filters(self):
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtWidgets import QApplication
+        from pdfiu_dialogs import ShortcutsDialog
+
+        app = QApplication.instance() or QApplication([])
+        for is_mac, expected_mod in ((True, "⌘"), (False, "Ctrl+")):
+            dialog = ShortcutsDialog(None, is_mac=is_mac)
+            try:
+                sections = dialog.sections(is_mac=is_mac)
+                self.assertEqual(len(sections), 4)
+                all_keys = " ".join(keys for _, entries in sections for _, keys in entries)
+                self.assertIn(expected_mod, all_keys)
+                dialog.apply_filter("triple")
+                visible_rows = sum(
+                    1 for _, rows in dialog._cards for widget, _ in rows if not widget.isHidden()
+                )
+                self.assertEqual(visible_rows, 1)
+                self.assertTrue(dialog.empty_label.isHidden())
+                dialog.apply_filter("zzzz-inexistente")
+                self.assertFalse(dialog.empty_label.isHidden())
+            finally:
+                dialog.close()
+
 
 if __name__ == "__main__":
     unittest.main()
