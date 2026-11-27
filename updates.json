@@ -1,5 +1,5 @@
 {
-  "version": "0.12.1",
+  "version": "0.12.2",
   "url": "https://github.com/mfcb89/pdfiu/releases",
-  "notes": "Compresión PDF mejorada (3 niveles rápidos + opciones avanzadas, soporte ICC/CMYK/SMask/escala de grises y limpieza de metadatos), panel de herramientas reorganizado, panel lateral redimensionable, nuevo panel de Firmas con tarjetas y filtro, y diálogos modernizados."
+  "notes": "Firma visual desde PNG/JPG/WebP/PDF con borrado automático de fondo blanco, barra flotante (HUD) semitransparente de páginas y zoom, enlaces e índices destacados con píldora Página X, paleta Ctrl+K estilo Spotlight, animaciones fluidas en paneles y botones, tarjetas de documentos recientes y mejoras en compresión y controles."
 }
