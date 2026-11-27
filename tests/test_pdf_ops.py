@@ -264,6 +264,42 @@ class PdfOpsTests(unittest.TestCase):
                 xobjs = reader.pages[0]["/Resources"].get("/XObject", {})
                 self.assertGreater(len(xobjs), 0)
 
+    def test_readonly_form_field_text_is_selectable_and_searchable(self):
+        from pypdf import PdfReader
+        from reportlab.pdfgen.canvas import Canvas
+
+        with tempfile.TemporaryDirectory() as folder:
+            src = Path(folder) / "diploma_form.pdf"
+            canvas = Canvas(str(src), pagesize=(595, 842))
+            canvas.setFont("Helvetica", 12)
+            canvas.drawString(72, 760, "Certificado de asistencia")
+            canvas.acroForm.textfield(
+                name="nombreAlumno",
+                value="Nombre Campo Solo Lectura",
+                x=72,
+                y=700,
+                width=300,
+                height=24,
+                fontName="Helvetica",
+                fontSize=12,
+                fieldFlags="readOnly",
+            )
+            canvas.showPage()
+            canvas.save()
+
+            before_bytes = src.read_bytes()
+            with self.pdf_ops.page_text(src, 0) as content:
+                extracted = content.get_text_range()
+            self.assertIn("Certificado de asistencia", extracted)
+            self.assertIn("Nombre Campo Solo Lectura", extracted)
+
+            hits = self.pdf_ops.search_document(src, "Solo Lectura", lambda *_: None)
+            self.assertEqual(len(hits), 1)
+            self.assertEqual(hits[0][0], 0)
+            # Original PDF on disk remains untouched and unflattened.
+            self.assertEqual(src.read_bytes(), before_bytes)
+            self.assertIn("/AcroForm", PdfReader(str(src)).root_object)
+
 
 if __name__ == "__main__":
     unittest.main()

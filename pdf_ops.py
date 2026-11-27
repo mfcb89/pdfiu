@@ -153,10 +153,15 @@ def page_text(path, index, *, password=None):
 def document_text(document, index):
     page = document[index]
     try:
+        if pdfium.raw.FPDFPage_Flatten(page.raw, pdfium.raw.FLAT_NORMALDISPLAY) == pdfium.raw.FLATTEN_SUCCESS:
+            page.close()
+            page = None
+            page = document[index]
         with document_text_on_page(page) as content:
             yield content
     finally:
-        page.close()
+        if page is not None:
+            page.close()
 
 
 _SEARCH_CLUSTERS = re.compile(r"\s+|\S[\u0300-\u036f]*")
