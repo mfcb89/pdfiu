@@ -165,6 +165,77 @@ class UiSmokeTests(unittest.TestCase):
             window.dirty = False
             window.close()
 
+    def test_macos_info_plist_registers_pdf_document_type(self):
+        import plistlib
+        from tempfile import TemporaryDirectory
+
+        sys.path.insert(0, str(ROOT / "packaging"))
+        try:
+            import build_app
+            from release_info import APP_VERSION
+        finally:
+            if str(ROOT / "packaging") in sys.path:
+                sys.path.remove(str(ROOT / "packaging"))
+
+        with TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / "PDFiu.app"
+            plist_path = bundle / "Contents" / "Info.plist"
+            plist_path.parent.mkdir(parents=True)
+            with plist_path.open("wb") as stream:
+                plistlib.dump({"CFBundleName": "PDFiu", "CFBundleShortVersionString": "0.0.0"}, stream)
+
+            build_app.patch_macos_info_plist(bundle)
+
+            with plist_path.open("rb") as stream:
+                updated = plistlib.load(stream)
+            self.assertEqual(updated["CFBundleShortVersionString"], APP_VERSION)
+            self.assertEqual(updated["CFBundleVersion"], APP_VERSION)
+            doc_types = updated["CFBundleDocumentTypes"]
+            self.assertEqual(len(doc_types), 1)
+            self.assertIn("com.adobe.pdf", doc_types[0]["LSItemContentTypes"])
+            self.assertIn("pdf", doc_types[0]["CFBundleTypeExtensions"])
+
+    def test_file_open_event_queues_and_opens_pdfs(self):
+        from types import SimpleNamespace
+        from PySide6.QtCore import QEvent
+        import pdfiu
+
+        class _DummyWindow:
+            def __init__(self):
+                self.opened = []
+                self.raised = 0
+                self.activated = 0
+
+            def open_path(self, path):
+                self.opened.append(path)
+
+            def raise_(self):
+                self.raised += 1
+
+            def activateWindow(self):
+                self.activated += 1
+
+        class _DummyFileOpenEvent:
+            def __init__(self, path):
+                self._path = path
+
+            def type(self):
+                return QEvent.Type.FileOpen
+
+            def file(self):
+                return self._path
+
+        holder = SimpleNamespace(_window=None, _pending_files=[])
+        holder._open_file = lambda path: pdfiu.PDFiuApplication._open_file(holder, path)
+        self.assertTrue(pdfiu.PDFiuApplication.event(holder, _DummyFileOpenEvent("/tmp/queued.pdf")))
+        self.assertTrue(pdfiu.PDFiuApplication.event(holder, _DummyFileOpenEvent("/tmp/ignored.txt")))
+        window = _DummyWindow()
+        pdfiu.PDFiuApplication.attach_window(holder, window)
+        self.assertTrue(pdfiu.PDFiuApplication.event(holder, _DummyFileOpenEvent("/tmp/live.PDF")))
+        self.assertEqual(window.opened, ["/tmp/queued.pdf", "/tmp/live.PDF"])
+        self.assertEqual(window.raised, 2)
+        self.assertEqual(window.activated, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

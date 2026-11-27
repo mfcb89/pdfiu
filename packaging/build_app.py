@@ -3,6 +3,7 @@
 import argparse
 import os
 import platform
+import plistlib
 import shlex
 import subprocess
 import sys
@@ -14,6 +15,29 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from release_info import APP_NAME, APP_VERSION, https_url
 from collect_notices import collect_notices, write_windows_binary_inventory
+
+
+def patch_macos_info_plist(bundle):
+    """Register PDF document handling and release version in the macOS app bundle."""
+    plist_path = Path(bundle) / "Contents" / "Info.plist"
+    with plist_path.open("rb") as stream:
+        info = plistlib.load(stream)
+    info["CFBundleShortVersionString"] = APP_VERSION
+    info["CFBundleVersion"] = APP_VERSION
+    info["LSApplicationCategoryType"] = "public.app-category.productivity"
+    info["CFBundleDocumentTypes"] = [
+        {
+            "CFBundleTypeName": "PDF Document",
+            "CFBundleTypeRole": "Editor",
+            "LSHandlerRank": "Alternate",
+            "LSItemContentTypes": ["com.adobe.pdf"],
+            "CFBundleTypeExtensions": ["pdf"],
+            "CFBundleTypeMIMETypes": ["application/pdf"],
+            "CFBundleTypeIconFile": "pdfiu-app.icns",
+        }
+    ]
+    with plist_path.open("wb") as stream:
+        plistlib.dump(info, stream)
 
 
 def main():
@@ -110,6 +134,10 @@ def main():
         (output / "release.iss").write_text(
             f'#define ProductName "{APP_NAME}"\n#define ReleaseVersion "{APP_VERSION}"\n', encoding="utf-8"
         )
+    elif sys.platform == "darwin":
+        bundle = output / "dist" / f"{APP_NAME}.app"
+        patch_macos_info_plist(bundle)
+        subprocess.run(["codesign", "--force", "--deep", "--sign", "-", str(bundle)], check=True, cwd=ROOT, env=build_env)
 
 
 if __name__ == "__main__":

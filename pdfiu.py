@@ -6612,6 +6612,38 @@ def read_explorer_selection(token):
     return [str(path) for path in paths]
 
 
+class PDFiuApplication(QApplication):
+    """Handle macOS Finder 'Open With' / double-click FileOpen events safely."""
+
+    def __init__(self, argv):
+        super().__init__(argv)
+        self._window = None
+        self._pending_files = []
+
+    def attach_window(self, window):
+        self._window = window
+        pending, self._pending_files = self._pending_files, []
+        for path in pending:
+            self._open_file(path)
+
+    def _open_file(self, path):
+        if self._window is None:
+            self._pending_files.append(path)
+            return
+        if Path(path).suffix.lower() == ".pdf":
+            self._window.open_path(path)
+            self._window.raise_()
+            self._window.activateWindow()
+
+    def event(self, event):
+        if event.type() == QEvent.Type.FileOpen:
+            path = event.file()
+            if path:
+                self._open_file(path)
+                return True
+        return super().event(event)
+
+
 def main():
     setup_logging(APP_NAME, APP_VERSION)
     if WINDOWS_BUNDLE:
@@ -6626,7 +6658,7 @@ def main():
         if not create_mutex(None, False, r"Local\PDFiu.Setup.AA1A6AE8"):
             raise ctypes.WinError(ctypes.get_last_error())
 
-    application = QApplication(sys.argv)
+    application = PDFiuApplication(sys.argv)
     application.setApplicationName(APP_NAME)
     application.setApplicationVersion(APP_VERSION)
     application.setWindowIcon(brand_icon())
@@ -6636,6 +6668,7 @@ def main():
     window.show()
     window.startup.finish(window)
     window.startup = None
+    application.attach_window(window)
     QTimer.singleShot(0, window, window.recover_interrupted_work)
     QTimer.singleShot(3000, window, window.schedule_update_check)
     if len(sys.argv) == 3 and sys.argv[1] == "--combine-selection" and sys.platform == "win32":
@@ -6648,8 +6681,10 @@ def main():
             window.merge_dialog(paths)
 
         QTimer.singleShot(0, combine_selection)
-    elif len(sys.argv) == 2 and Path(sys.argv[1]).suffix.lower() == ".pdf":
-        window.open_path(sys.argv[1])
+    elif len(sys.argv) >= 2:
+        for arg in sys.argv[1:]:
+            if Path(arg).suffix.lower() == ".pdf":
+                window.open_path(arg)
     return application.exec()
 
 
